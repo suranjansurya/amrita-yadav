@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Cormorant Garamond', serif;
+    --font-script: 'Great Vibes', cursive;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+    
+    --color-pink-soft: #FFF5F8;
+    --color-pink-blush: #FDE8E9;
+    --color-pink-mid: #F8C3D3;
+    --color-pink-deep: #E89BB1;
+    --color-rose-gold: #D9889E;
+    --color-gold-soft: #F5E1A4;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    font-family: var(--font-body);
+    background-color: #FFF2F6;
+    color: #4A2E35;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background-color: #F8C3D3;
+    color: #5C2333;
+  }
+}
+
+/* Typography Helpers */
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-script {
+  font-family: var(--font-script);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+/* Custom Backgrounds & Gradients */
+.bg-pink-base {
+  background: radial-gradient(circle at 50% 20%, #FFF8FA 0%, #FDE9EE 45%, #F8D5E0 80%, #F4C4D4 100%);
+}
+
+.bg-dream-atmosphere {
+  background: radial-gradient(circle at 50% 50%, rgba(255, 248, 250, 0.95) 0%, rgba(253, 233, 238, 0.85) 50%, rgba(248, 213, 224, 0.75) 100%);
+}
+
+/* Glassmorphism System */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 32px 0 rgba(220, 140, 165, 0.15),
+              inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.glass-panel-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 15px 40px 0 rgba(215, 120, 150, 0.25),
+              0 0 20px 2px rgba(255, 255, 255, 0.8);
+  transform: translateY(-4px);
+}
+
+.glass-button {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 230, 238, 0.5) 100%);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 24px -4px rgba(230, 150, 175, 0.3),
+              inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.glass-button:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 215, 228, 0.8) 100%);
+  border-color: #FFFFFF;
+  box-shadow: 0 12px 32px -4px rgba(220, 120, 150, 0.45),
+              0 0 25px 4px rgba(255, 240, 245, 0.9);
+  transform: scale(1.03);
+}
+
+.glass-button:active {
+  transform: scale(0.98);
+}
+
+/* Glowing & Shimmer Effects */
+.glow-text-title {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.9),
+               0 0 40px rgba(248, 195, 211, 0.7),
+               0 2px 10px rgba(180, 80, 110, 0.2);
+}
+
+.glow-text-subtle {
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.8),
+               0 2px 8px rgba(195, 110, 135, 0.15);
+}
+
+.text-gradient-rose {
+  background: linear-gradient(135deg, #4A2E35 0%, #7A3B4E 40%, #B85B77 75%, #D97E98 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #8C5362 0%, #B86B80 35%, #D9889E 70%, #E6A2B3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FFF2F6;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #F4C4D4;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #E89BB1;
+}
+
+/* Keyframe Animations */
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1deg); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.6)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 30px rgba(255, 200, 220, 0.9)); }
+}
+
+.animate-float-slow {
+  animation: floatGentle 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}

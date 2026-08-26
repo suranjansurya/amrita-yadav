@@ -1,0 +1,58 @@
+export const gardenSecretsData = [
+  {
+    id: 'secret-lotus',
+    symbol: '🪷',
+    title: 'The Quiet Bloom',
+    message: 'Some things bloom quietly.',
+    detail: 'Resilience and beauty unfolding in their own serene time.',
+  },
+  {
+    id: 'secret-star',
+    symbol: '✨',
+    title: 'The Quiet Light',
+    message: 'Some lights are easier to notice when everything else is quiet.',
+    detail: 'Shining gently in moments of peace and calm.',
+  },
+  {
+    id: 'secret-butterfly',
+    symbol: '🦋',
+    title: 'The Free Spirit',
+    message: 'Some beautiful things never need to stay still.',
+    detail: 'Bringing grace and color into every moment.',
+  },
+  {
+    id: 'secret-heart',
+    symbol: '❤️',
+    title: 'The Soft Feeling',
+    message: 'Some feelings quietly find their way home.',
+    detail: 'An unforced warmth that stays constant.',
+  },
+  {
+    id: 'secret-moon',
+    symbol: '🌙',
+    title: 'The Quiet Night',
+    message: 'Even quiet nights can hold beautiful memories.',
+    detail: 'Under the soft blush sky of your world.',
+  },
+  {
+    id: 'secret-petal',
+    symbol: '🌸',
+    title: 'The Floating Petal',
+    message: 'Little things can carry big feelings.',
+    detail: 'Small details crafted with endless thought.',
+  },
+  {
+    id: 'secret-crystal',
+    symbol: '🔮',
+    title: 'The Pure Moment',
+    message: 'Some moments are worth keeping.',
+    detail: 'Etched in stardust and rose light.',
+  },
+  {
+    id: 'secret-light',
+    symbol: '🌤️',
+    title: 'The Luminous Ray',
+    message: 'Some people leave a little light behind.',
+    detail: 'Brightening every place they touch.',
+  },
+];
