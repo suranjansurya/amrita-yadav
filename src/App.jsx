@@ -3,7 +3,14 @@ import { useWindowSize } from './hooks/useWindowSize';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useTimeBasedGreeting } from './hooks/useTimeBasedGreeting';
 import { secretsData } from './data/secretsData';
-import { getCurrentUser, isUserAuthenticated, restoreUserSession, logoutUser } from './lib/auth';
+import {
+  getCurrentUser,
+  isUserAuthenticated,
+  isEntryPointAuthenticated,
+  getEntryPointUser,
+  restoreUserSession,
+  logoutUser,
+} from './lib/auth';
 import { supabase } from './lib/supabase';
 
 // 3D Background Canvas & Animations
@@ -119,8 +126,11 @@ export default function App() {
   const [selectedSecret, setSelectedSecret] = useState(null);
 
   // Strictly Isolated User & Admin Role States
-  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [currentUser, setCurrentUser] = useState(() => getEntryPointUser('world'));
   const [isHeartCheckInDone, setIsHeartCheckInDone] = useState(false);
+
+  // Active Entry Point Gate for Multi-User Isolated Login
+  const [activeEntryPointGate, setActiveEntryPointGate] = useState(null);
 
   const [isJustForYouOpen, setIsJustForYouOpen] = useState(false);
   const [isConstellationOpen, setIsConstellationOpen] = useState(false);
@@ -143,13 +153,15 @@ export default function App() {
   const [gardenDiscoveries, setGardenDiscoveries] = useState([]);
   const [activeGardenDiscovery, setActiveGardenDiscovery] = useState(null);
 
-  // Restore Session on Startup & Setup Listener
+  // Restore World Session on Startup & Setup Listener
   useEffect(() => {
     let authSubscription = null;
 
     async function initSession() {
       try {
-        const usr = await restoreUserSession();
+        console.log('[Auth Init] Restoring user session on app launch...');
+        const usr = await restoreUserSession('world');
+        console.log('[Auth Init] Session check complete. User active:', Boolean(usr));
         if (usr) {
           setCurrentUser(usr);
           const uId = usr.userId || 'amritayadav';
@@ -186,6 +198,15 @@ export default function App() {
       if (authSubscription) authSubscription.unsubscribe();
     };
   }, []);
+
+  // Entry Point Access Helper: Ensures every protected entry point requires its own authorization gate
+  const handleOpenEntryPoint = (entryPoint, openModalCallback) => {
+    if (isEntryPointAuthenticated(entryPoint)) {
+      openModalCallback();
+    } else {
+      setActiveEntryPointGate({ entryPoint, onGranted: openModalCallback });
+    }
+  };
 
   // Track scroll position across all 51 sections
   useEffect(() => {
@@ -239,7 +260,7 @@ export default function App() {
 
   const handleUserLogout = async () => {
     const uId = currentUser?.userId || 'amritayadav';
-    await logoutUser();
+    await logoutUser('world');
     setCurrentUser(null);
     setIsHeartCheckInDone(false);
     localStorage.removeItem(`amrita_heart_checkin_completed_${uId}`);
@@ -290,10 +311,11 @@ export default function App() {
     );
   }
 
-  // ROUTE GUARD 2: Normal Website User View (Requires User Authorization)
-  if (!currentUser || !isUserAuthenticated()) {
+  // ROUTE GUARD 2: Primary Entry Point Login Gate ("world")
+  if (!currentUser || !isEntryPointAuthenticated('world')) {
     return (
       <UserLoginModal
+        entryPoint="world"
         onLoginSuccess={(usr) => {
           setCurrentUser(usr);
           const uId = usr.userId || 'amritayadav';
@@ -336,7 +358,7 @@ export default function App() {
           </div>
 
           <button
-            onClick={() => setIsJustForYouOpen(true)}
+            onClick={() => handleOpenEntryPoint('justforyou', () => setIsJustForYouOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Just For You"
           >
@@ -344,7 +366,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsConstellationOpen(true)}
+            onClick={() => handleOpenEntryPoint('sky', () => setIsConstellationOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Interactive Constellation Sky"
           >
@@ -352,7 +374,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsSecretUnlockOpen(true)}
+            onClick={() => handleOpenEntryPoint('secrets', () => setIsSecretUnlockOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Secret Unlock Milestones"
           >
@@ -360,7 +382,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsDigitalHugOpen(true)}
+            onClick={() => handleOpenEntryPoint('hug', () => setIsDigitalHugOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Receive a Digital Hug"
           >
@@ -368,7 +390,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsSurpriseMeOpen(true)}
+            onClick={() => handleOpenEntryPoint('surprise', () => setIsSurpriseMeOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Trigger a Random Surprise"
           >
@@ -376,7 +398,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsMemoryJarOpen(true)}
+            onClick={() => handleOpenEntryPoint('jar', () => setIsMemoryJarOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Memory Jar"
           >
@@ -384,7 +406,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsMemoryTimelineOpen(true)}
+            onClick={() => handleOpenEntryPoint('memories', () => setIsMemoryTimelineOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Memory Timeline"
           >
@@ -392,7 +414,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsMoodHistoryOpen(true)}
+            onClick={() => handleOpenEntryPoint('moods', () => setIsMoodHistoryOpen(true))}
             className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
             title="Open Mood History"
           >
@@ -409,6 +431,19 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Entry Point Gate Modal for Protected Links */}
+      {activeEntryPointGate && (
+        <UserLoginModal
+          entryPoint={activeEntryPointGate.entryPoint}
+          onLoginSuccess={(usr) => {
+            const callback = activeEntryPointGate.onGranted;
+            setActiveEntryPointGate(null);
+            if (callback) callback();
+          }}
+          onOpenAdmin={() => setIsAdminOpen(true)}
+        />
+      )}
 
       {/* 3D Dynamic Dream Canvas */}
       <DreamCanvas section={currentSection} isMobile={isMobile} />
@@ -504,15 +539,15 @@ export default function App() {
       <JustForYouModal
         isOpen={isJustForYouOpen}
         onClose={() => setIsJustForYouOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('justforyou') || currentUser}
         audioState={audioState}
         onTriggerHug={() => {
           setIsJustForYouOpen(false);
-          setIsDigitalHugOpen(true);
+          handleOpenEntryPoint('hug', () => setIsDigitalHugOpen(true));
         }}
         onTriggerSurprise={() => {
           setIsJustForYouOpen(false);
-          setIsSurpriseMeOpen(true);
+          handleOpenEntryPoint('surprise', () => setIsSurpriseMeOpen(true));
         }}
       />
 
@@ -520,21 +555,21 @@ export default function App() {
       <ConstellationModal
         isOpen={isConstellationOpen}
         onClose={() => setIsConstellationOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('sky') || currentUser}
       />
 
       {/* Phase 27: Secret Unlock System Modal Overlay */}
       <SecretUnlockModal
         isOpen={isSecretUnlockOpen}
         onClose={() => setIsSecretUnlockOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('secrets') || currentUser}
       />
 
       {/* Phase 26: Digital Hug Modal Overlay */}
       <DigitalHugModal
         isOpen={isDigitalHugOpen}
         onClose={() => setIsDigitalHugOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('hug') || currentUser}
         audioState={audioState}
       />
 
@@ -542,7 +577,7 @@ export default function App() {
       <SurpriseMeModal
         isOpen={isSurpriseMeOpen}
         onClose={() => setIsSurpriseMeOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('surprise') || currentUser}
         audioState={audioState}
       />
 
@@ -550,7 +585,7 @@ export default function App() {
       <MemoryJarModal
         isOpen={isMemoryJarOpen}
         onClose={() => setIsMemoryJarOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('jar') || currentUser}
       />
 
       {/* Phase 23: Memory Timeline Modal Overlay */}
@@ -563,7 +598,7 @@ export default function App() {
       <MoodHistoryModal
         isOpen={isMoodHistoryOpen}
         onClose={() => setIsMoodHistoryOpen(false)}
-        currentUser={currentUser}
+        currentUser={getEntryPointUser('moods') || currentUser}
         onUpdateToday={() => {
           setIsMoodHistoryOpen(false);
           setIsHeartCheckInDone(false);
@@ -596,7 +631,7 @@ export default function App() {
       />
 
       {/* Phase 13: Secret Vault Discovery Trigger & Modal */}
-      <SecretVaultTrigger onOpenVault={() => setIsVaultOpen(true)} />
+      <SecretVaultTrigger onOpenVault={() => handleOpenEntryPoint('vault', () => setIsVaultOpen(true))} />
       <SecretVaultModal
         isOpen={isVaultOpen}
         onClose={() => setIsVaultOpen(false)}

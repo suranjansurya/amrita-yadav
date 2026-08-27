@@ -1,7 +1,7 @@
 /**
- * Strictly Decoupled Authentication Architecture
+ * Strictly Decoupled & Entry-Point Isolated Authentication Architecture
  * Admin Auth: In-memory only (Resets on Refresh F5)
- * User Auth: Persistent User Session (localStorage + sessionStorage)
+ * User Auth: Entry-Point Scoped Session Authorization (Entry A vs Entry B)
  * Role System: Admin PIN (sangam9534) vs Normal User role ('user')
  */
 
@@ -44,10 +44,10 @@ export function logoutAdmin() {
 }
 
 /* ===================================================
-   2. USER AUTHENTICATION & SESSION PERSISTENCE
+   2. USER ENTRY-POINT ISOLATED AUTHENTICATION
    =================================================== */
 
-export async function loginUser({ userId, password, rememberMe = true }) {
+export async function loginUser({ userId, password, entryPoint = 'world', rememberMe = true }) {
   if (!userId || !password) {
     throw new Error('User ID ya password incorrect hai. ❤️');
   }
@@ -84,15 +84,20 @@ export async function loginUser({ userId, password, rememberMe = true }) {
     userId: foundUser.userId,
     displayName: foundUser.displayName || foundUser.userId,
     email: `${cleanUserId}@amritayadav.internal`,
-    token: `user_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    entryPoint: entryPoint || 'world',
+    token: `user_token_${entryPoint}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     authenticatedAt: new Date().toISOString(),
   };
 
-  // Always persist user token to BOTH localStorage & sessionStorage to guarantee login retention across F5 refresh & tab reopens
+  // Store entry-point specific session authorization
+  localStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(userObj));
+  sessionStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(userObj));
+
+  // Store current global session reference
   localStorage.setItem('amrita_user_token', JSON.stringify(userObj));
   sessionStorage.setItem('amrita_user_token', JSON.stringify(userObj));
 
-  // Also sync with Supabase Auth session if environment variables are present
+  // Sync with Supabase Auth session
   if (supabase && supabase.auth) {
     try {
       await supabase.auth.setSession({
@@ -107,14 +112,15 @@ export async function loginUser({ userId, password, rememberMe = true }) {
   // Record last login time
   adminRecordLastLogin(cleanUserId);
 
-  // Activity Log: User Login
+  // Activity Log: User Entry-Point Login
   saveUserActivity({
     event_type: 'login',
-    title: '🔐 User Logged In',
-    description: `User @${foundUser.userId} logged in`,
+    title: `🔐 Logged into ${entryPoint.toUpperCase()}`,
+    description: `User @${foundUser.userId} logged into entry point: ${entryPoint}`,
     metadata: {
       action: 'login',
       username: foundUser.userId,
+      entry_point: entryPoint,
     },
     user_id: foundUser.id || `usr-${cleanUserId}`,
   });
@@ -122,8 +128,8 @@ export async function loginUser({ userId, password, rememberMe = true }) {
   return userObj;
 }
 
-export function isUserAuthenticated() {
-  const sess = localStorage.getItem('amrita_user_token') || sessionStorage.getItem('amrita_user_token');
+export function isEntryPointAuthenticated(entryPoint = 'world') {
+  const sess = localStorage.getItem(`amrita_entry_auth_${entryPoint}`) || sessionStorage.getItem(`amrita_entry_auth_${entryPoint}`);
   if (!sess) return false;
   try {
     const parsed = JSON.parse(sess);
@@ -133,8 +139,8 @@ export function isUserAuthenticated() {
   }
 }
 
-export function getCurrentUser() {
-  const sess = localStorage.getItem('amrita_user_token') || sessionStorage.getItem('amrita_user_token');
+export function getEntryPointUser(entryPoint = 'world') {
+  const sess = localStorage.getItem(`amrita_entry_auth_${entryPoint}`) || sessionStorage.getItem(`amrita_entry_auth_${entryPoint}`);
   if (!sess) return null;
   try {
     const parsed = JSON.parse(sess);
@@ -147,7 +153,15 @@ export function getCurrentUser() {
   return null;
 }
 
-export async function restoreUserSession() {
+export function isUserAuthenticated() {
+  return isEntryPointAuthenticated('world');
+}
+
+export function getCurrentUser() {
+  return getEntryPointUser('world');
+}
+
+export async function restoreUserSession(entryPoint = 'world') {
   // Check Supabase session first
   if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
     try {
@@ -160,11 +174,12 @@ export async function restoreUserSession() {
           userId: uId,
           displayName: data.session.user.user_metadata?.display_name || uId,
           email: data.session.user.email,
-          token: data.session.access_token || `user_token_${Date.now()}`,
+          entryPoint: entryPoint,
+          token: data.session.access_token || `user_token_${entryPoint}_${Date.now()}`,
           authenticatedAt: new Date().toISOString(),
         };
-        localStorage.setItem('amrita_user_token', JSON.stringify(userObj));
-        sessionStorage.setItem('amrita_user_token', JSON.stringify(userObj));
+        localStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(userObj));
+        sessionStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(userObj));
         return userObj;
       }
     } catch (e) {
@@ -172,24 +187,24 @@ export async function restoreUserSession() {
     }
   }
 
-  // Fallback to robust local storage session
-  const currentUser = getCurrentUser();
-  if (currentUser) {
-    localStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
-    sessionStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
-    return currentUser;
+  // Fallback to robust entry-point local storage session
+  const epUser = getEntryPointUser(entryPoint);
+  if (epUser) {
+    localStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(epUser));
+    sessionStorage.setItem(`amrita_entry_auth_${entryPoint}`, JSON.stringify(epUser));
+    return epUser;
   }
   return null;
 }
 
-export async function logoutUser() {
-  const usr = getCurrentUser();
+export async function logoutUser(entryPoint = 'world') {
+  const usr = getEntryPointUser(entryPoint);
   if (usr) {
     saveUserActivity({
       event_type: 'logout',
-      title: '🔒 User Logged Out',
-      description: `User @${usr.userId} logged out`,
-      metadata: { action: 'logout', username: usr.userId },
+      title: `🔒 Logged Out from ${entryPoint.toUpperCase()}`,
+      description: `User @${usr.userId} logged out from entry point: ${entryPoint}`,
+      metadata: { action: 'logout', username: usr.userId, entry_point: entryPoint },
       user_id: usr.id || `usr-${usr.userId}`,
     });
   }
@@ -202,12 +217,10 @@ export async function logoutUser() {
     }
   }
 
+  localStorage.removeItem(`amrita_entry_auth_${entryPoint}`);
+  sessionStorage.removeItem(`amrita_entry_auth_${entryPoint}`);
   localStorage.removeItem('amrita_user_token');
   sessionStorage.removeItem('amrita_user_token');
-  sessionStorage.removeItem('amrita_user_session');
-  localStorage.removeItem('amrita_user_session');
-  localStorage.removeItem('amrita_heart_checkin_completed');
-  sessionStorage.removeItem('amrita_heart_checkin_completed');
 }
 
 /* ===================================================

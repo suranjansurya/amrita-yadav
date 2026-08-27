@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { loginUser } from '../../lib/auth';
-import { Heart, Lock, User, Sparkles } from 'lucide-react';
+import { Heart, Lock, User, Sparkles, ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
+export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdmin }) {
   const [userIdInput, setUserIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -24,6 +24,7 @@ export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
       const user = await loginUser({
         userId: userIdInput,
         password: passwordInput,
+        entryPoint: entryPoint,
         rememberMe: rememberMe,
       });
 
@@ -39,11 +40,13 @@ export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
         onLoginSuccess(user);
       }, 500);
     } catch (err) {
-      console.warn('[UserLoginModal] Authorization failed');
-      setErrorMessage('User ID ya password incorrect hai. ❤️');
+      console.warn('[UserLoginModal] Authorization failed:', err.message);
+      setErrorMessage(err.message || 'User ID ya password incorrect hai. ❤️');
       setIsLoggingIn(false);
     }
   };
+
+  const formattedEntryPoint = (entryPoint || 'world').toUpperCase();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/40 backdrop-blur-lg animate-fadeIn select-none">
@@ -57,8 +60,17 @@ export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
         <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-gradient-rose mb-1">
           Welcome to Amrita's World
         </h2>
+
+        {/* Entry Point Badge */}
+        <div className="my-2">
+          <span className="px-3 py-1 rounded-full bg-pink-100 text-pink-800 text-xs font-bold uppercase tracking-wider inline-flex items-center space-x-1">
+            <Lock size={12} className="text-pink-600" />
+            <span>Entry Gate: {formattedEntryPoint}</span>
+          </span>
+        </div>
+
         <p className="font-script text-xl text-pink-700 mb-6">
-          Enter credentials to unlock your little dream world... ✨
+          Enter User credentials to unlock this protected entry point... ✨
         </p>
 
         {/* Login Form */}
@@ -98,50 +110,47 @@ export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
             </div>
           </div>
 
-          {/* Remember Me Checkbox */}
-          <div className="flex items-center justify-between text-xs text-pink-800 font-semibold px-1 pt-1">
+          {/* Error Notice */}
+          {errorMessage && (
+            <p className="text-xs font-semibold text-rose-600 animate-bounce">
+              {errorMessage}
+            </p>
+          )}
+
+          {/* Remember Me Toggle */}
+          <div className="flex items-center justify-between text-xs text-pink-900 font-semibold px-1">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 rounded border-pink-300 text-pink-500 focus:ring-pink-300"
+                className="rounded border-pink-300 text-pink-500 focus:ring-pink-400"
               />
-              <span>Remember me</span>
+              <span>Keep entry point unlocked</span>
             </label>
+
+            {onOpenAdmin && (
+              <button
+                type="button"
+                onClick={onOpenAdmin}
+                className="text-pink-600 hover:text-pink-950 underline focus:outline-none font-bold"
+              >
+                Admin PIN Login →
+              </button>
+            )}
           </div>
 
-          {/* Error Message */}
-          {errorMessage && (
-            <p className="text-xs font-semibold text-rose-600 animate-bounce pt-1">
-              {errorMessage}
-            </p>
-          )}
-
-          {/* Submit Button */}
+          {/* Submit Action */}
           <button
             type="submit"
             disabled={isLoggingIn}
-            className="w-full py-4 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 text-white font-bold text-sm uppercase tracking-widest shadow-xl hover:scale-102 active:scale-98 transition-all flex items-center justify-center space-x-2 focus:outline-none cursor-pointer mt-2"
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-sm uppercase tracking-wider shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center space-x-2"
           >
-            <Sparkles size={16} />
-            <span>{isLoggingIn ? 'Logging in...' : 'Login ❤️'}</span>
+            <Sparkles size={18} />
+            <span>{isLoggingIn ? 'Authenticating...' : `Unlock ${formattedEntryPoint}`}</span>
           </button>
+
         </form>
-
-        {/* Discreet Admin Login Shortcut Link */}
-        {onOpenAdmin && (
-          <div className="pt-4 border-t border-pink-100 mt-4">
-            <button
-              type="button"
-              onClick={onOpenAdmin}
-              className="text-xs font-semibold text-pink-500 hover:text-pink-800 transition-colors focus:outline-none block mx-auto underline tracking-wider cursor-pointer"
-            >
-              Admin Login 🔐
-            </button>
-          </div>
-        )}
-
       </div>
     </div>
   );
