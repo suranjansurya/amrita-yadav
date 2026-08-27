@@ -1,0 +1,1231 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
+
+export const ALLOWED_MOODS = ['Bahut achchi', 'Happy', 'Theek-thaak', 'Thodi sad'];
+
+export const MOOD_DETAILS = {
+  'Bahut achchi': {
+    emoji: '😊',
+    title: 'Bahut achchi',
+    response: 'Ye smile hamesha bani rahe, Amrita. ❤️',
+  },
+  Happy: {
+    emoji: '🥰',
+    title: 'Happy',
+    response: 'Keep that beautiful happiness with you. ✨',
+  },
+  'Theek-thaak': {
+    emoji: '😌',
+    title: 'Theek-thaak',
+    response: 'Thoda sa smile bhi chalega. Everything will be okay. 🌸',
+  },
+  'Thodi sad': {
+    emoji: '😔',
+    title: 'Thodi sad',
+    response: 'Take a little breath... better moments are coming. 🌙',
+  },
+};
+
+export const MEMORY_CATEGORIES = [
+  '❤️ Special',
+  '🌸 Cute',
+  '✨ Beautiful',
+  '🥰 Favorite',
+  '🌙 Late Night',
+  '💭 Memory',
+  '🎉 Celebration',
+];
+
+export const JAR_CATEGORIES = [
+  '❤️ Love',
+  '🌸 Cute',
+  '✨ Beautiful',
+  '🥰 Favorite',
+  '😂 Funny',
+  '🌙 Late Night',
+  '💭 Thought',
+  '🎁 Surprise',
+];
+
+export const DEFAULT_SECRET_UNLOCKS = [
+  { id: 'sec-1', name: '🌱 First Visit', reqType: 'first_visit', reqVal: 1, title: 'Welcome Special Note 🌸', message: 'Thank you for stepping into this little dream world made just for you. ❤️', is_active: true },
+  { id: 'sec-2', name: '❤️ First Mood Check-in', reqType: 'mood_checkin', reqVal: 1, title: 'Heart Connection ✨', message: 'Sharing how you feel makes every day a little warmer. 🌸', is_active: true },
+  { id: 'sec-3', name: '🌸 3-Day Streak', reqType: 'checkin_streak', reqVal: 3, title: '3-Day Friendship 🌸', message: 'Three days of checking in... you make this little space bloom. ✨', is_active: true },
+  { id: 'sec-4', name: '✨ 7-Day Streak', reqType: 'checkin_streak', reqVal: 7, title: '7-Day Memory ✨', message: 'A whole week of memories. There is something truly special about you. ❤️', is_active: true },
+  { id: 'sec-5', name: '💕 10-Day Streak', reqType: 'checkin_streak', reqVal: 10, title: '10-Day Master Milestone 💕', message: 'Ten days together! Thank you for making this world part of your routine. 🥰', is_active: true },
+  { id: 'sec-6', name: '🫙 Save 3 Memories', reqType: 'saved_memories', reqVal: 3, title: 'Treasure Keeper 🫙', message: 'You have saved 3 memories to your heart collection. ❤️', is_active: true },
+  { id: 'sec-7', name: '🎁 Open 5 Surprises', reqType: 'surprise_count', reqVal: 5, title: 'Surprise Explorer 🎁', message: 'Curiosity looks beautiful on you. Always keep discovering! ✨', is_active: true },
+  { id: 'sec-8', name: '🤗 Use Digital Hug 5 times', reqType: 'hug_count', reqVal: 5, title: 'Warm Embrace Hug 🤗', message: 'Sending you the biggest digital hug imaginable. Stay cozy! ❤️', is_active: true },
+  { id: 'sec-9', name: '📖 Write 3 Journal Entries', reqType: 'journal_count', reqVal: 3, title: 'Secret Diary Note 📖', message: 'Your written words hold pure magic. Keep expressing your heart. 🌸', is_active: true },
+  { id: 'sec-10', name: '🌙 Night Check-in', reqType: 'night_checkin', reqVal: 1, title: 'Late Night Moon 🌙', message: 'Late night thoughts are the gentlest ones. Have a peaceful sleep tonight. 🌙❤️', is_active: true },
+];
+
+export const DEFAULT_CONSTELLATIONS = [
+  {
+    id: 'cst-1',
+    name: '❤️ Heart Constellation',
+    description: 'A constellation formed by pure warmth and gentleness.',
+    is_active: true,
+    rewardTitle: '✨ A constellation has come alive!',
+    rewardMessage: 'Your kindness lights up even the darkest skies. Thank you for being you. ✨❤️',
+    stars: [
+      { id: 'str-1', name: '⭐ Star of the Day', x: 20, y: 30, type: 'daily', message: 'Every single day brings a fresh little reason to smile. ✨' },
+      { id: 'str-2', name: '🌸 Gentle Smile Star', x: 40, y: 20, type: 'quote', message: 'Your smile makes everything feel a little lighter. ❤️' },
+      { id: 'str-3', name: '🌙 Quiet Rest Star', x: 65, y: 25, type: 'comfort', message: 'Take a quiet breath and let the night hold your worries. 🌙' },
+      { id: 'str-4', name: '✨ Sparkle Star', x: 50, y: 45, type: 'surprise', message: 'You are capable of creating magic wherever you go! 🌸' },
+      { id: 'str-5', name: '💌 Open When Star', x: 25, y: 55, type: 'sweet', message: 'Whenever you feel lost, remember this little world is always here for you. ❤️' },
+    ],
+  },
+  {
+    id: 'cst-2',
+    name: '🌸 Lotus Constellation',
+    description: 'Blooming softly in the quiet night air.',
+    is_active: true,
+    rewardTitle: '✨ A constellation has come alive!',
+    rewardMessage: 'Like a lotus in bloom, your grace remains steady through every season. 🌸✨',
+    stars: [
+      { id: 'str-6', name: '🫙 Memory Note Star', x: 15, y: 75, type: 'jar', message: 'Some moments are meant to be kept forever in glass. ❤️' },
+      { id: 'str-7', name: '🤗 Warm Hug Star', x: 35, y: 80, type: 'hug', message: 'Sending you a warm, cozy embrace under the stars. 🤗' },
+      { id: 'str-8', name: '🌸 Memory Timeline Star', x: 60, y: 70, type: 'memory', message: 'Remember when we first opened this little place? Moments stay forever. 🌸' },
+      { id: 'str-9', name: '🔐 Streak Locked Star', x: 80, y: 80, type: 'locked', reqType: 'checkin_streak', reqVal: 3, message: 'Unlocked with a 3-day check-in streak! You are amazing. ✨' },
+      { id: 'str-10', name: '🎁 Surprise Burst Star', x: 85, y: 60, type: 'surprise', message: 'Surprise! A little extra love just for you today. ❤️' },
+    ],
+  },
+  {
+    id: 'cst-3',
+    name: '✨ Serendipity Constellation',
+    description: 'Where beautiful coincidences find their home.',
+    is_active: true,
+    rewardTitle: '✨ A constellation has come alive!',
+    rewardMessage: 'Meeting you was not chance—it was serendipity in its purest form. ✨🥰',
+    stars: [
+      { id: 'str-11', name: '💫 Coincidence Star', x: 75, y: 15, type: 'sweet', message: 'Some people enter your life and suddenly everything makes sense. ❤️' },
+      { id: 'str-12', name: '🌙 Night Wish Star', x: 88, y: 30, type: 'comfort', message: 'May your night be filled with soft dreams and quiet peace. 🌙' },
+      { id: 'str-13', name: '🔐 Favorite Locked Star', x: 70, y: 45, type: 'locked', reqType: 'saved_memories', reqVal: 3, message: 'Unlocked by saving 3 memories! Keep treasuring moments. 🫙' },
+      { id: 'str-14', name: '🌸 Soft Heart Star', x: 92, y: 45, type: 'quote', message: 'Soft hearts are the strongest things in the universe. 🌸' },
+      { id: 'str-15', name: '🤗 Comfort Hug Star', x: 82, y: 10, type: 'hug', message: 'A gentle little hug across the sky. 🤗❤️' },
+    ],
+  },
+  {
+    id: 'cst-4',
+    name: '🌙 Moonlit Dream Constellation',
+    description: 'Guiding quiet thoughts through the late hours.',
+    is_active: true,
+    rewardTitle: '✨ A constellation has come alive!',
+    rewardMessage: 'Even on the darkest nights, your light shines bright. 🌙✨',
+    stars: [
+      { id: 'str-16', name: '🌙 Moonbeam Star', x: 10, y: 15, type: 'comfort', message: 'The moon is watching over you tonight. Rest well. 🌙' },
+      { id: 'str-17', name: '💌 Letter Note Star', x: 30, y: 10, type: 'sweet', message: 'You have a gentle way of bringing warmth into every room. ❤️' },
+      { id: 'str-18', name: '🔐 Journal Locked Star', x: 12, y: 40, type: 'locked', reqType: 'journal_count', reqVal: 3, message: 'Unlocked by writing 3 journal entries! Your heart speaks poetry. 📖' },
+      { id: 'str-19', name: '🎁 Gift Star', x: 45, y: 35, type: 'surprise', message: 'Here is a little sprinkle of happiness for your day! ✨' },
+      { id: 'str-20', name: '🫙 Memory Jar Star', x: 28, y: 45, type: 'jar', message: 'Picked straight from the memory jar of sweet thoughts. 🫙❤️' },
+    ],
+  },
+  {
+    id: 'cst-5',
+    name: '💕 Soulmate Constellation',
+    description: 'Connecting two hearts across every distance.',
+    is_active: true,
+    rewardTitle: '✨ A constellation has come alive!',
+    rewardMessage: 'Two souls bound by warmth, respect, and eternal care. 💕✨',
+    stars: [
+      { id: 'str-21', name: '💕 Connection Star', x: 40, y: 88, type: 'sweet', message: 'True connection never fades—it only grows deeper with time. ❤️' },
+      { id: 'str-22', name: '🌸 Eternal Flower Star', x: 55, y: 92, type: 'quote', message: 'You bloom with grace in every moment. 🌸' },
+      { id: 'str-23', name: '🔐 Hugs Locked Star', x: 70, y: 90, type: 'locked', reqType: 'hug_count', reqVal: 5, message: 'Unlocked by receiving 5 digital hugs! Warmth forever. 🤗' },
+      { id: 'str-24', name: '✨ Final Crown Star', x: 85, y: 92, type: 'surprise', message: 'You have explored the highest stars! Stay radiant. ✨' },
+      { id: 'str-25', name: '🌙 Peaceful Night Star', x: 18, y: 90, type: 'comfort', message: 'Sleep peacefully knowing you are deeply cared for. 🌙❤️' },
+    ],
+  },
+];
+
+export const DEFAULT_DAILY_MESSAGES = [
+  { id: 'msg-1', category: 'General', title: 'Daily Warmth 💌', message: 'You make ordinary moments feel a little more special. Never forget how much you matter. ❤️', is_active: true },
+  { id: 'msg-2', category: 'General', title: 'A Gentle Reminder 🌸', message: 'Don\'t forget to appreciate yourself too. You are doing wonderfully. 🌷', is_active: true },
+  { id: 'msg-3', category: 'Night', title: 'Sweet Dreams 🌙', message: 'Leave the heavy parts of today behind. Tomorrow is a brand new little beginning. 🌙❤️', is_active: true },
+];
+
+export async function saveMoodCheckIn({ mood, message = '' }) {
+  if (!ALLOWED_MOODS.includes(mood)) {
+    throw new Error('Invalid mood value selected');
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const entry = {
+    id: `mood-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    mood,
+    message: message.trim(),
+    created_at: now.toISOString(),
+    date: dateStr,
+    time: timeStr,
+  };
+
+  const localHistory = JSON.parse(localStorage.getItem('amrita_mood_history') || '[]');
+  const updatedLocal = [entry, ...localHistory];
+  localStorage.setItem('amrita_mood_history', JSON.stringify(updatedLocal));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { error } = await supabase.from('mood_checkins').insert([
+        {
+          mood: entry.mood,
+          message: entry.message,
+          created_at: entry.created_at,
+          date: entry.date,
+          time: entry.time,
+        },
+      ]);
+
+      if (error) {
+        console.warn('[Supabase] Insert error, saved to local cache:', error.message);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Connection exception, saved to local cache:', e);
+    }
+  }
+
+  return entry;
+}
+
+export async function fetchMoodCheckIns(filter = 'All') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('mood_checkins')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch failed, falling back to local storage');
+    }
+  }
+
+  if (records.length === 0) {
+    records = JSON.parse(localStorage.getItem('amrita_mood_history') || '[]');
+  }
+
+  const now = new Date();
+  return records.filter((rec) => {
+    if (filter === 'All') return true;
+    const recDate = new Date(rec.created_at || Date.now());
+
+    if (filter === 'Today') {
+      return recDate.toDateString() === now.toDateString();
+    }
+
+    if (filter === 'This Week') {
+      const diffTime = Math.abs(now - recDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 7;
+    }
+
+    if (filter === 'This Month') {
+      return (
+        recDate.getMonth() === now.getMonth() && recDate.getFullYear() === now.getFullYear()
+      );
+    }
+
+    return true;
+  });
+}
+
+export async function saveJournalEntry({ mood = '', journal_text }) {
+  if (!journal_text || !journal_text.trim()) {
+    throw new Error('Journal entry cannot be empty');
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const entry = {
+    id: `journal-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    mood,
+    journal_text: journal_text.trim().substring(0, 500),
+    created_at: now.toISOString(),
+    date: dateStr,
+    time: timeStr,
+  };
+
+  const localJournal = JSON.parse(localStorage.getItem('amrita_journal_history') || '[]');
+  const updatedLocal = [entry, ...localJournal];
+  localStorage.setItem('amrita_journal_history', JSON.stringify(updatedLocal));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { error } = await supabase.from('journal_entries').insert([
+        {
+          mood: entry.mood,
+          journal_text: entry.journal_text,
+          created_at: entry.created_at,
+          date: entry.date,
+          time: entry.time,
+        },
+      ]);
+
+      if (error) {
+        console.warn('[Supabase] Journal insert error, saved to local cache:', error.message);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Journal connection exception, saved to local cache:', e);
+    }
+  }
+
+  return entry;
+}
+
+export async function fetchJournalEntries(filter = 'All') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch journal failed, falling back to local storage');
+    }
+  }
+
+  if (records.length === 0) {
+    records = JSON.parse(localStorage.getItem('amrita_journal_history') || '[]');
+  }
+
+  const now = new Date();
+  return records.filter((rec) => {
+    if (filter === 'All') return true;
+    const recDate = new Date(rec.created_at || Date.now());
+
+    if (filter === 'Today') {
+      return recDate.toDateString() === now.toDateString();
+    }
+
+    if (filter === 'This Week') {
+      const diffTime = Math.abs(now - recDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 7;
+    }
+
+    if (filter === 'This Month') {
+      return (
+        recDate.getMonth() === now.getMonth() && recDate.getFullYear() === now.getFullYear()
+      );
+    }
+
+    return true;
+  });
+}
+
+export async function getTodayHeartCheckIn(user_id = 'usr-amritayadav') {
+  const localHistory = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+  const todayStr = new Date().toDateString();
+  const todayEntry = localHistory.find(
+    (e) => e.user_id === user_id && new Date(e.created_at).toDateString() === todayStr
+  );
+  return todayEntry || null;
+}
+
+export async function saveOrUpdateHeartCheckIn({
+  mood,
+  day_feeling,
+  current_need,
+  heart_word = '',
+  shared_message = '',
+  user_id = 'usr-amritayadav',
+}) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const localHistory = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+  const todayStr = now.toDateString();
+  const existingIdx = localHistory.findIndex(
+    (e) => e.user_id === user_id && new Date(e.created_at).toDateString() === todayStr
+  );
+
+  let updatedEntry;
+
+  if (existingIdx >= 0) {
+    updatedEntry = {
+      ...localHistory[existingIdx],
+      mood,
+      day_feeling,
+      current_need,
+      heart_word: heart_word.trim(),
+      shared_message: shared_message.trim(),
+      updated_at: now.toISOString(),
+      date: dateStr,
+      time: timeStr,
+    };
+    localHistory[existingIdx] = updatedEntry;
+  } else {
+    updatedEntry = {
+      id: `heart-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      user_id,
+      mood,
+      day_feeling,
+      current_need,
+      heart_word: heart_word.trim(),
+      shared_message: shared_message.trim(),
+      created_at: now.toISOString(),
+      date: dateStr,
+      time: timeStr,
+    };
+    localHistory.unshift(updatedEntry);
+  }
+
+  localStorage.setItem('amrita_heart_checkins_history', JSON.stringify(localHistory));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { error } = await supabase.from('heart_checkins').upsert([
+        {
+          user_id: updatedEntry.user_id,
+          mood: updatedEntry.mood,
+          day_feeling: updatedEntry.day_feeling,
+          current_need: updatedEntry.current_need,
+          heart_word: updatedEntry.heart_word,
+          shared_message: updatedEntry.shared_message,
+          created_at: updatedEntry.created_at,
+          date: updatedEntry.date,
+          time: updatedEntry.time,
+        },
+      ]);
+
+      if (error) {
+        console.warn('[Supabase] Heart check-in upsert error:', error.message);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Upsert exception:', e);
+    }
+  }
+
+  return updatedEntry;
+}
+
+export async function fetchUserHeartHistory(user_id = 'usr-amritayadav') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('heart_checkins')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch user heart history failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+    records = local.filter((e) => e.user_id === user_id);
+  }
+
+  return records;
+}
+
+export async function fetchHeartCheckIns(filter = 'All') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('heart_checkins')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch heart check-ins failed, falling back to local storage');
+    }
+  }
+
+  if (records.length === 0) {
+    records = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+  }
+
+  const now = new Date();
+  return records.filter((rec) => {
+    if (filter === 'All') return true;
+    const recDate = new Date(rec.created_at || Date.now());
+
+    if (filter === 'Today') {
+      return recDate.toDateString() === now.toDateString();
+    }
+
+    if (filter === 'This Week' || filter === 'Last 7 days') {
+      const diffTime = Math.abs(now - recDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 7;
+    }
+
+    if (filter === 'This Month') {
+      return (
+        recDate.getMonth() === now.getMonth() && recDate.getFullYear() === now.getFullYear()
+      );
+    }
+
+    return true;
+  });
+}
+
+export async function fetchMemories({ includeHidden = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('memories').select('*').order('memory_date', { ascending: false });
+      if (!includeHidden) {
+        query = query.eq('is_visible', true);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch memories failed, falling back to local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_memories_data') || '[]');
+    records = includeHidden ? local : local.filter((m) => m.is_visible !== false);
+  }
+
+  return records;
+}
+
+export async function saveMemory(memoryData) {
+  const now = new Date();
+  const id = memoryData.id || `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  
+  const record = {
+    id,
+    title: memoryData.title.trim(),
+    memory_date: memoryData.memory_date || now.toISOString().split('T')[0],
+    category: memoryData.category || '❤️ Special',
+    short_description: memoryData.short_description.trim(),
+    full_description: (memoryData.full_description || '').trim(),
+    image_url: (memoryData.image_url || '').trim(),
+    is_visible: memoryData.is_visible !== false,
+    created_at: memoryData.created_at || now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_memories_data') || '[]');
+  const existingIdx = local.findIndex((m) => m.id === id);
+
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.unshift(record);
+  }
+  localStorage.setItem('amrita_memories_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { error } = await supabase.from('memories').upsert([record]);
+      if (error) {
+        console.warn('[Supabase] Memory upsert error:', error.message);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Memory save exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteMemory(memoryId) {
+  const local = JSON.parse(localStorage.getItem('amrita_memories_data') || '[]');
+  const updated = local.filter((m) => m.id !== memoryId);
+  localStorage.setItem('amrita_memories_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('memories').delete().eq('id', memoryId);
+    } catch (e) {
+      console.warn('[Supabase] Memory delete exception:', e);
+    }
+  }
+}
+
+export async function toggleMemoryVisibility(memoryId) {
+  const local = JSON.parse(localStorage.getItem('amrita_memories_data') || '[]');
+  const item = local.find((m) => m.id === memoryId);
+  if (item) {
+    item.is_visible = !item.is_visible;
+    localStorage.setItem('amrita_memories_data', JSON.stringify(local));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('memories').update({ is_visible: item.is_visible }).eq('id', memoryId);
+      } catch (e) {
+        console.warn('[Supabase] Visibility update exception:', e);
+      }
+    }
+  }
+}
+
+export async function fetchJarMemories({ includeInactive = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('memory_jar').select('*').order('created_at', { ascending: false });
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch jar memories failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_memory_jar_data') || '[]');
+    records = includeInactive ? local : local.filter((j) => j.is_active !== false);
+  }
+
+  return records;
+}
+
+export async function saveJarMemory(jarData) {
+  const now = new Date();
+  const id = jarData.id || `jar-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  
+  const record = {
+    id,
+    title: jarData.title.trim(),
+    message: jarData.message.trim(),
+    category: jarData.category || '❤️ Love',
+    memory_date: jarData.memory_date || now.toISOString().split('T')[0],
+    is_active: jarData.is_active !== false,
+    created_at: jarData.created_at || now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_memory_jar_data') || '[]');
+  const existingIdx = local.findIndex((j) => j.id === id);
+
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.unshift(record);
+  }
+  localStorage.setItem('amrita_memory_jar_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('memory_jar').upsert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Jar memory save exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteJarMemory(jarId) {
+  const local = JSON.parse(localStorage.getItem('amrita_memory_jar_data') || '[]');
+  const updated = local.filter((j) => j.id !== jarId);
+  localStorage.setItem('amrita_memory_jar_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('memory_jar').delete().eq('id', jarId);
+    } catch (e) {
+      console.warn('[Supabase] Jar memory delete exception:', e);
+    }
+  }
+}
+
+export async function toggleJarMemoryActive(jarId) {
+  const local = JSON.parse(localStorage.getItem('amrita_memory_jar_data') || '[]');
+  const item = local.find((j) => j.id === jarId);
+  if (item) {
+    item.is_active = !item.is_active;
+    localStorage.setItem('amrita_memory_jar_data', JSON.stringify(local));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('memory_jar').update({ is_active: item.is_active }).eq('id', jarId);
+      } catch (e) {
+        console.warn('[Supabase] Jar active update exception:', e);
+      }
+    }
+  }
+}
+
+export async function saveUserFavoriteMemory({ user_id = 'usr-amritayadav', memory_id, memory_data }) {
+  const now = new Date();
+  const favEntry = {
+    id: `fav-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    user_id,
+    memory_id: memory_id || memory_data.id,
+    title: memory_data.title,
+    message: memory_data.message || memory_data.short_description || '',
+    category: memory_data.category || '❤️ Love',
+    memory_date: memory_data.memory_date || now.toISOString().split('T')[0],
+    created_at: now.toISOString(),
+  };
+
+  const localFavs = JSON.parse(localStorage.getItem('amrita_user_favorites') || '[]');
+  const updatedFavs = [favEntry, ...localFavs];
+  localStorage.setItem('amrita_user_favorites', JSON.stringify(updatedFavs));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('user_memory_favorites').insert([favEntry]);
+    } catch (e) {
+      console.warn('[Supabase] Save favorite exception:', e);
+    }
+  }
+
+  return favEntry;
+}
+
+export async function fetchUserFavoriteMemories(user_id = 'usr-amritayadav') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('user_memory_favorites')
+        .select('*')
+        .eq('user_id', user_id)
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch favorites failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_user_favorites') || '[]');
+    records = local.filter((f) => f.user_id === user_id);
+  }
+
+  return records;
+}
+
+export async function deleteUserFavoriteMemory(user_id = 'usr-amritayadav', favoriteId) {
+  const local = JSON.parse(localStorage.getItem('amrita_user_favorites') || '[]');
+  const updated = local.filter((f) => f.id !== favoriteId);
+  localStorage.setItem('amrita_user_favorites', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('user_memory_favorites').delete().eq('id', favoriteId);
+    } catch (e) {
+      console.warn('[Supabase] Delete favorite exception:', e);
+    }
+  }
+}
+
+export async function fetchSurprisePool(user_id = 'usr-amritayadav') {
+  const [jData, tData, hData] = await Promise.all([
+    fetchJarMemories({ includeInactive: false }),
+    fetchMemories({ includeHidden: false }),
+    fetchUserHeartHistory(user_id),
+  ]);
+
+  const latestHeart = hData[0] || null;
+
+  return {
+    jarMemories: jData,
+    timelineMemories: tData,
+    latestHeart,
+  };
+}
+
+export async function getUserHugCount(user_id = 'usr-amritayadav') {
+  const localHugs = JSON.parse(localStorage.getItem('amrita_user_hugs_count') || '{}');
+  return localHugs[user_id] || 0;
+}
+
+export async function incrementUserHugCount(user_id = 'usr-amritayadav') {
+  const localHugs = JSON.parse(localStorage.getItem('amrita_user_hugs_count') || '{}');
+  const current = (localHugs[user_id] || 0) + 1;
+  localHugs[user_id] = current;
+  localStorage.setItem('amrita_user_hugs_count', JSON.stringify(localHugs));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('user_hugs').upsert([{ user_id, hug_count: current, updated_at: new Date().toISOString() }]);
+    } catch (e) {
+      console.warn('[Supabase] Hug count update exception:', e);
+    }
+  }
+
+  return current;
+}
+
+export async function fetchComfortMessages({ includeInactive = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('comfort_messages').select('*').order('created_at', { ascending: false });
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch comfort messages failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_comfort_messages_data') || '[]');
+    records = includeInactive ? local : local.filter((c) => c.is_active !== false);
+  }
+
+  return records;
+}
+
+export async function saveComfortMessage(msgData) {
+  const now = new Date();
+  const id = msgData.id || `cmf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const record = {
+    id,
+    title: msgData.title.trim(),
+    message: msgData.message.trim(),
+    mood: msgData.mood || 'All',
+    is_active: msgData.is_active !== false,
+    created_at: msgData.created_at || now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_comfort_messages_data') || '[]');
+  const existingIdx = local.findIndex((c) => c.id === id);
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.unshift(record);
+  }
+  localStorage.setItem('amrita_comfort_messages_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('comfort_messages').upsert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Save comfort msg exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteComfortMessage(msgId) {
+  const local = JSON.parse(localStorage.getItem('amrita_comfort_messages_data') || '[]');
+  const updated = local.filter((c) => c.id !== msgId);
+  localStorage.setItem('amrita_comfort_messages_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('comfort_messages').delete().eq('id', msgId);
+    } catch (e) {
+      console.warn('[Supabase] Delete comfort msg exception:', e);
+    }
+  }
+}
+
+export async function fetchSecretUnlocks({ includeInactive = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('secret_unlocks').select('*').order('created_at', { ascending: true });
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch secret unlocks failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_secret_unlocks_data') || '[]');
+    records = local.length > 0 ? local : DEFAULT_SECRET_UNLOCKS;
+    if (!includeInactive) {
+      records = records.filter((s) => s.is_active !== false);
+    }
+  }
+
+  return records;
+}
+
+export async function saveSecretUnlock(unlockData) {
+  const now = new Date();
+  const id = unlockData.id || `sec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const record = {
+    id,
+    name: unlockData.name.trim(),
+    reqType: unlockData.reqType,
+    reqVal: Number(unlockData.reqVal) || 1,
+    title: unlockData.title.trim(),
+    message: unlockData.message.trim(),
+    image: (unlockData.image || '').trim(),
+    is_active: unlockData.is_active !== false,
+    created_at: unlockData.created_at || now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_secret_unlocks_data') || '[]');
+  const existingIdx = local.findIndex((s) => s.id === id);
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.push(record);
+  }
+  localStorage.setItem('amrita_secret_unlocks_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('secret_unlocks').upsert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Save secret unlock exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteSecretUnlock(unlockId) {
+  const local = JSON.parse(localStorage.getItem('amrita_secret_unlocks_data') || '[]');
+  const updated = local.filter((s) => s.id !== unlockId);
+  localStorage.setItem('amrita_secret_unlocks_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('secret_unlocks').delete().eq('id', unlockId);
+    } catch (e) {
+      console.warn('[Supabase] Delete secret unlock exception:', e);
+    }
+  }
+}
+
+export async function evaluateUserProgress(user_id = 'usr-amritayadav') {
+  const [hData, fData, jData, hugCount] = await Promise.all([
+    fetchUserHeartHistory(user_id),
+    fetchUserFavoriteMemories(user_id),
+    fetchJournalEntries('All'),
+    getUserHugCount(user_id),
+  ]);
+
+  const visitCount = Number(localStorage.getItem(`amrita_visit_count_${user_id}`) || '1');
+  const moodCheckinCount = hData.length;
+
+  let streak = 0;
+  if (hData.length > 0) {
+    const dates = Array.from(new Set(hData.map((h) => new Date(h.created_at).toDateString())));
+    streak = dates.length;
+  }
+
+  const savedMemoriesCount = fData.length;
+  const surpriseCount = Number(localStorage.getItem(`amrita_surprise_count_${user_id}`) || '0');
+  const journalCount = jData.length;
+
+  const hasNightCheckin = hData.some((h) => {
+    const hour = new Date(h.created_at).getHours();
+    return hour >= 21 || hour < 5;
+  });
+
+  return {
+    first_visit: visitCount,
+    mood_checkin: moodCheckinCount,
+    checkin_streak: streak,
+    saved_memories: savedMemoriesCount,
+    surprise_count: surpriseCount,
+    hug_count: hugCount,
+    journal_count: journalCount,
+    night_checkin: hasNightCheckin ? 1 : 0,
+  };
+}
+
+export async function fetchConstellations({ includeInactive = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('constellations').select('*').order('created_at', { ascending: true });
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch constellations failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_constellations_data') || '[]');
+    records = local.length > 0 ? local : DEFAULT_CONSTELLATIONS;
+    if (!includeInactive) {
+      records = records.filter((c) => c.is_active !== false);
+    }
+  }
+
+  return records;
+}
+
+export async function saveConstellation(constData) {
+  const now = new Date();
+  const id = constData.id || `cst-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const record = {
+    id,
+    name: constData.name.trim(),
+    description: (constData.description || '').trim(),
+    rewardTitle: (constData.rewardTitle || '').trim(),
+    rewardMessage: (constData.rewardMessage || '').trim(),
+    is_active: constData.is_active !== false,
+    stars: constData.stars || [],
+    created_at: constData.created_at || now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_constellations_data') || '[]');
+  const existingIdx = local.findIndex((c) => c.id === id);
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.push(record);
+  }
+  localStorage.setItem('amrita_constellations_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('constellations').upsert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Save constellation exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteConstellation(constId) {
+  const local = JSON.parse(localStorage.getItem('amrita_constellations_data') || '[]');
+  const updated = local.filter((c) => c.id !== constId);
+  localStorage.setItem('amrita_constellations_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('constellations').delete().eq('id', constId);
+    } catch (e) {
+      console.warn('[Supabase] Delete constellation exception:', e);
+    }
+  }
+}
+
+export async function getUserStarDiscoveries(user_id = 'usr-amritayadav') {
+  const local = JSON.parse(localStorage.getItem(`amrita_star_discoveries_${user_id}`) || '[]');
+  return local;
+}
+
+export async function saveUserStarDiscovery(user_id = 'usr-amritayadav', starId) {
+  const local = JSON.parse(localStorage.getItem(`amrita_star_discoveries_${user_id}`) || '[]');
+  if (!local.includes(starId)) {
+    local.push(starId);
+    localStorage.setItem(`amrita_star_discoveries_${user_id}`, JSON.stringify(local));
+  }
+  return local;
+}
+
+/* ===================================================
+   PHASE 29: JUST FOR YOU HELPERS
+   =================================================== */
+
+export async function fetchDailyMessages({ includeInactive = false } = {}) {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('daily_messages').select('*').order('created_at', { ascending: false });
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch daily messages failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_daily_messages_data') || '[]');
+    records = local.length > 0 ? local : DEFAULT_DAILY_MESSAGES;
+    if (!includeInactive) {
+      records = records.filter((m) => m.is_active !== false);
+    }
+  }
+
+  return records;
+}
+
+export async function saveDailyMessage(msgData) {
+  const now = new Date();
+  const id = msgData.id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const record = {
+    id,
+    title: msgData.title.trim(),
+    message: msgData.message.trim(),
+    category: msgData.category || 'General',
+    is_active: msgData.is_active !== false,
+    created_at: msgData.created_at || now.toISOString(),
+  };
+
+  const local = JSON.parse(localStorage.getItem('amrita_daily_messages_data') || '[]');
+  const existingIdx = local.findIndex((m) => m.id === id);
+  if (existingIdx >= 0) {
+    local[existingIdx] = record;
+  } else {
+    local.unshift(record);
+  }
+  localStorage.setItem('amrita_daily_messages_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('daily_messages').upsert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Save daily message exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function deleteDailyMessage(msgId) {
+  const local = JSON.parse(localStorage.getItem('amrita_daily_messages_data') || '[]');
+  const updated = local.filter((m) => m.id !== msgId);
+  localStorage.setItem('amrita_daily_messages_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('daily_messages').delete().eq('id', msgId);
+    } catch (e) {
+      console.warn('[Supabase] Delete daily message exception:', e);
+    }
+  }
+}
+
+export async function fetchJustForYouData(user_id = 'usr-amritayadav') {
+  const [hData, fData, jData, dMsgs, secUnlocks, consts, starDiscoveries, hugCount] = await Promise.all([
+    fetchUserHeartHistory(user_id),
+    fetchUserFavoriteMemories(user_id),
+    fetchJournalEntries('All'),
+    fetchDailyMessages({ includeInactive: false }),
+    fetchSecretUnlocks({ includeInactive: false }),
+    fetchConstellations({ includeInactive: false }),
+    getUserStarDiscoveries(user_id),
+    getUserHugCount(user_id),
+  ]);
+
+  const latestHeart = hData[0] || null;
+  const latestJournal = jData[0] || null;
+  const userProgress = await evaluateUserProgress(user_id);
+
+  // Deterministic daily message based on date string
+  const todayStr = new Date().toDateString();
+  let dayHash = 0;
+  for (let i = 0; i < todayStr.length; i++) {
+    dayHash = (dayHash << 5) - dayHash + todayStr.charCodeAt(i);
+    dayHash |= 0;
+  }
+  const msgIdx = Math.abs(dayHash) % (dMsgs.length || 1);
+  const todayMessage = dMsgs[msgIdx] || DEFAULT_DAILY_MESSAGES[0];
+
+  // Find next incomplete secret unlock
+  const nextSecret = secUnlocks.find((s) => (userProgress[s.reqType] || 0) < (s.reqVal || 1)) || null;
+
+  return {
+    latestHeart,
+    latestJournal,
+    favorites: fData,
+    todayMessage,
+    nextSecret,
+    stats: {
+      checkinCount: hData.length,
+      savedCount: fData.length,
+      surpriseCount: Number(localStorage.getItem(`amrita_surprise_count_${user_id}`) || '0'),
+      hugCount,
+      starCount: starDiscoveries.length,
+      secretCount: secUnlocks.filter((s) => (userProgress[s.reqType] || 0) >= (s.reqVal || 1)).length,
+      journalCount: jData.length,
+    },
+    constellationStats: {
+      discoveredStars: starDiscoveries.length,
+      totalStars: consts.flatMap((c) => c.stars).length,
+      completedConstellations: consts.filter((c) => c.stars.map((s) => s.id).every((id) => starDiscoveries.includes(id))).length,
+      totalConstellations: consts.length,
+    },
+  };
+}

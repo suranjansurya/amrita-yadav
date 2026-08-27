@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useWindowSize } from './hooks/useWindowSize';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
+import { useTimeBasedGreeting } from './hooks/useTimeBasedGreeting';
 import { secretsData } from './data/secretsData';
+import { getCurrentUser, isUserAuthenticated, logoutUser } from './lib/auth';
 
 // 3D Background Canvas & Animations
 import { DreamCanvas } from './components/3d/DreamCanvas';
@@ -10,6 +12,31 @@ import { HeartBalloonPopOpening } from './components/animations/HeartBalloonPopO
 import { MusicPlayer } from './components/common/MusicPlayer';
 import { DiscoveryModal } from './components/common/DiscoveryModal';
 import { ProgressNav } from './components/common/ProgressNav';
+
+// User Login, Heart Check-in, Mood History, Timeline, Memory Jar, Surprise Me, Digital Hug, Secret Unlock, Constellation, Just For You & Admin Dashboard
+import { UserLoginModal } from './components/common/UserLoginModal';
+import { HeartCheckInModal } from './components/common/HeartCheckInModal';
+import { MoodHistoryModal } from './components/common/MoodHistoryModal';
+import { MemoryTimelineModal } from './components/common/MemoryTimelineModal';
+import { MemoryJarModal } from './components/common/MemoryJarModal';
+import { SurpriseMeModal } from './components/common/SurpriseMeModal';
+import { DigitalHugModal } from './components/common/DigitalHugModal';
+import { SecretUnlockModal } from './components/common/SecretUnlockModal';
+import { ConstellationModal } from './components/common/ConstellationModal';
+import { JustForYouModal } from './components/common/JustForYouModal';
+import { MoodCheckInModal } from './components/common/MoodCheckInModal';
+import { AdminDashboard } from './pages/AdminDashboard';
+
+// Interactive Modules
+import { SecretVaultTrigger } from './components/common/SecretVaultTrigger';
+import { SecretVaultModal } from './components/common/SecretVaultModal';
+import { SweetMessageModal } from './components/common/SweetMessageModal';
+import { InteractiveGardenOverlay } from './components/common/InteractiveGardenOverlay';
+import { GardenDiscoveryToast } from './components/common/GardenDiscoveryToast';
+import { JournalModal } from './components/common/JournalModal';
+import { OpenWhenModal } from './components/common/OpenWhenModal';
+
+import { LogOut, User, Heart, Sparkles, Archive, Gift, Moon, Lock, Compass, Mail } from 'lucide-react';
 
 // Phase 1 & 2 Sections
 import { Section01Hero } from './components/sections/Section01Hero';
@@ -82,16 +109,44 @@ import { Section50FinalControls } from './components/sections/Section50FinalCont
 export default function App() {
   const { isMobile } = useWindowSize();
   const audioState = useAudioPlayer('/music/song.mp3');
+  const { atmosphereClass } = useTimeBasedGreeting();
 
   const [enterGlow, setEnterGlow] = useState(false);
   const [currentSection, setCurrentSection] = useState(0);
   const [discoveredIds, setDiscoveredIds] = useState([]);
   const [selectedSecret, setSelectedSecret] = useState(null);
 
+  // Strictly Isolated User & Admin Role States
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [isHeartCheckInDone, setIsHeartCheckInDone] = useState(
+    () => Boolean(sessionStorage.getItem('amrita_heart_checkin_completed'))
+  );
+
+  const [isJustForYouOpen, setIsJustForYouOpen] = useState(false);
+  const [isConstellationOpen, setIsConstellationOpen] = useState(false);
+  const [isSecretUnlockOpen, setIsSecretUnlockOpen] = useState(false);
+  const [isDigitalHugOpen, setIsDigitalHugOpen] = useState(false);
+  const [isSurpriseMeOpen, setIsSurpriseMeOpen] = useState(false);
+  const [isMemoryJarOpen, setIsMemoryJarOpen] = useState(false);
+  const [isMemoryTimelineOpen, setIsMemoryTimelineOpen] = useState(false);
+  const [isMoodHistoryOpen, setIsMoodHistoryOpen] = useState(false);
+  const [isMoodModalOpen, setIsMoodModalOpen] = useState(false);
+  const [isVaultOpen, setIsVaultOpen] = useState(false);
+  const [isSweetMsgOpen, setIsSweetMsgOpen] = useState(false);
+  const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const [isOpenWhenOpen, setIsOpenWhenOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(
+    window.location.pathname === '/admin' || window.location.search.includes('admin=true')
+  );
+
+  // Interactive Garden Discoveries
+  const [gardenDiscoveries, setGardenDiscoveries] = useState([]);
+  const [activeGardenDiscovery, setActiveGardenDiscovery] = useState(null);
+
   // Track scroll position across all 51 sections
   useEffect(() => {
     const handleScroll = () => {
-      const scrollY = window.scrollY;
+      const scrollY = window.innerHeight;
       const windowH = window.innerHeight;
       const sectionIndex = Math.min(50, Math.floor((scrollY + windowH * 0.4) / windowH));
       setCurrentSection(sectionIndex);
@@ -123,6 +178,13 @@ export default function App() {
     }
   };
 
+  const handleTriggerGardenDiscovery = (item) => {
+    setActiveGardenDiscovery(item);
+    if (!gardenDiscoveries.includes(item.id)) {
+      setGardenDiscoveries((prev) => [...prev, item.id]);
+    }
+  };
+
   const handleContinueToPhase10 = () => {
     const windowH = window.innerHeight;
     window.scrollTo({
@@ -131,13 +193,150 @@ export default function App() {
     });
   };
 
+  const handleUserLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+    setIsHeartCheckInDone(false);
+    sessionStorage.removeItem('amrita_heart_checkin_completed');
+  };
+
+  const handleHeartCheckInComplete = () => {
+    sessionStorage.setItem('amrita_heart_checkin_completed', 'true');
+    setIsHeartCheckInDone(true);
+  };
+
+  // ROUTE GUARD 1: Private Admin View (Checks dedicated Admin PIN inside AdminDashboard)
+  if (isAdminOpen) {
+    return (
+      <AdminDashboard
+        onExit={() => {
+          setIsAdminOpen(false);
+          if (window.location.pathname === '/admin') {
+            window.history.replaceState(null, '', '/');
+          }
+        }}
+      />
+    );
+  }
+
+  // ROUTE GUARD 2: Normal Website User View (Requires User Authorization)
+  if (!currentUser || !isUserAuthenticated()) {
+    return (
+      <UserLoginModal
+        onLoginSuccess={(usr) => setCurrentUser(usr)}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+      />
+    );
+  }
+
+  // PHASE 21 OVERLAY: Pre-entry Heart Check-in Screen
+  if (!isHeartCheckInDone) {
+    return (
+      <HeartCheckInModal
+        currentUser={currentUser}
+        onComplete={handleHeartCheckInComplete}
+      />
+    );
+  }
+
   return (
-    <div className="relative min-h-screen bg-pink-base text-pink-950 font-body select-none overflow-x-hidden">
+    <div className={`relative min-h-screen ${atmosphereClass} transition-colors duration-1000 text-pink-950 font-body select-none overflow-x-hidden`}>
       {/* Initial 4-6 second Heart Balloon Pop Opening Animation */}
       <HeartBalloonPopOpening />
 
       {/* Interactive Cursor Sparkle Trail */}
       <SparkleTrail isMobile={isMobile} />
+
+      {/* Top Left User Profile Badge & Quick Menu Buttons */}
+      <div className="fixed top-6 left-6 z-40 select-none flex items-center space-x-2">
+        <div className="glass-panel px-4 py-2 rounded-full border border-pink-200 shadow-md bg-white/80 flex items-center space-x-3 text-xs font-bold text-pink-950">
+          <div className="flex items-center space-x-1.5 text-pink-700">
+            <User size={14} />
+            <span>{currentUser.displayName || currentUser.userId}</span>
+          </div>
+
+          <button
+            onClick={() => setIsJustForYouOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Just For You Personal Space"
+          >
+            <Mail size={12} className="text-pink-500" />
+            <span>💌 Just For You</span>
+          </button>
+
+          <button
+            onClick={() => setIsConstellationOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Our Little Sky"
+          >
+            <Compass size={12} className="text-pink-500" />
+            <span>🌌 Sky</span>
+          </button>
+
+          <button
+            onClick={() => setIsSecretUnlockOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Secret Unlock System"
+          >
+            <Lock size={12} className="text-pink-500" />
+            <span>🔐 Secrets</span>
+          </button>
+
+          <button
+            onClick={() => setIsDigitalHugOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Digital Hug"
+          >
+            <Heart size={12} className="fill-rose-400 text-rose-500" />
+            <span>🤗 Hug</span>
+          </button>
+
+          <button
+            onClick={() => setIsSurpriseMeOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Surprise Me"
+          >
+            <Gift size={12} className="text-pink-500" />
+            <span>🎁 Surprise</span>
+          </button>
+
+          <button
+            onClick={() => setIsMemoryJarOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Our Little Memory Jar"
+          >
+            <Archive size={12} className="text-pink-500" />
+            <span>🫙 Jar</span>
+          </button>
+
+          <button
+            onClick={() => setIsMemoryTimelineOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Our Little Memories"
+          >
+            <Heart size={12} className="fill-rose-400 text-rose-500" />
+            <span>❤️ Timeline</span>
+          </button>
+
+          <button
+            onClick={() => setIsMoodHistoryOpen(true)}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="View Mood History"
+          >
+            <Sparkles size={12} className="text-pink-500" />
+            <span>🌸 Moods</span>
+          </button>
+
+          <button
+            onClick={handleUserLogout}
+            className="pl-2 border-l border-pink-200 text-[11px] text-pink-500 hover:text-pink-800 uppercase tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
+            title="Logout"
+          >
+            <LogOut size={12} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
 
       {/* Side Journey Progress Navigation (52 Sections) */}
       <ProgressNav currentSection={currentSection} totalSections={52} />
@@ -151,6 +350,12 @@ export default function App() {
         discoveredIds={discoveredIds}
       />
 
+      {/* Phase 17: Interactive Garden Overlay Floating Elements */}
+      <InteractiveGardenOverlay
+        onTriggerDiscovery={handleTriggerGardenDiscovery}
+        discoveredList={gardenDiscoveries}
+      />
+
       {/* Complete 51-Section Master Cinematic Journey (Phase 1 to 10) */}
       <main className="relative z-10 space-y-12 sm:space-y-24">
         {/* Phase 1 & 2 */}
@@ -159,14 +364,15 @@ export default function App() {
         <Section03WhyThisExists />
 
         {/* Phase 3 */}
-        <Section04TheFeeling />
+        <Section04TheFeeling onOpenOpenWhen={() => setIsOpenWhenOpen(true)} />
         <Section05YouAreDifferent />
         <Section06LittleThings
           onSelectSecret={handleSelectSecret}
           discoveredIds={discoveredIds}
+          onOpenSweetMessage={() => setIsSweetMsgOpen(true)}
         />
         <Section07PhotoFrame />
-        <Section08WhatYouMean />
+        <Section08WhatYouMean onOpenJournal={() => setIsJournalOpen(true)} />
         <Section09OurConnection />
 
         {/* Phase 4: SOULMATE × SOULBOUND */}
@@ -225,14 +431,139 @@ export default function App() {
         <Section50FinalControls />
       </main>
 
-      {/* Master Footer */}
+      {/* Master Footer with Admin Dashboard Quick Link */}
       <footer className="relative z-10 py-12 text-center text-xs font-semibold text-pink-700/80 border-t border-pink-200/50 backdrop-blur-sm">
         <p className="font-script text-2xl text-pink-800 mb-1">Amrita Yadav</p>
-        <p>A little world made for one special soul • All 10 Phases 100% Complete</p>
+        <p>A little world made for one special soul • Phase 29 Active</p>
+        <button
+          onClick={() => setIsAdminOpen(true)}
+          className="mt-3 text-[10px] uppercase tracking-widest text-pink-500 hover:text-pink-800 underline focus:outline-none cursor-pointer"
+        >
+          🔒 Admin Dashboard (/admin)
+        </button>
       </footer>
 
       {/* Audio Controller */}
       <MusicPlayer audioState={audioState} />
+
+      {/* Phase 29: Just For You Personal Space Overlay */}
+      <JustForYouModal
+        isOpen={isJustForYouOpen}
+        onClose={() => setIsJustForYouOpen(false)}
+        currentUser={currentUser}
+        audioState={audioState}
+        onOpenHeartCheckIn={() => {
+          setIsJustForYouOpen(false);
+          setIsHeartCheckInDone(false);
+        }}
+        onOpenSurprise={() => {
+          setIsJustForYouOpen(false);
+          setIsSurpriseMeOpen(true);
+        }}
+        onOpenConstellation={() => {
+          setIsJustForYouOpen(false);
+          setIsConstellationOpen(true);
+        }}
+        onOpenSecretUnlock={() => {
+          setIsJustForYouOpen(false);
+          setIsSecretUnlockOpen(true);
+        }}
+        onOpenJournal={() => {
+          setIsJustForYouOpen(false);
+          setIsJournalOpen(true);
+        }}
+      />
+
+      {/* Phase 28: Interactive Constellation Modal Overlay */}
+      <ConstellationModal
+        isOpen={isConstellationOpen}
+        onClose={() => setIsConstellationOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Phase 27: Secret Unlock System Modal Overlay */}
+      <SecretUnlockModal
+        isOpen={isSecretUnlockOpen}
+        onClose={() => setIsSecretUnlockOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Phase 26: Digital Hug & Comfort Mode Modal Overlay */}
+      <DigitalHugModal
+        isOpen={isDigitalHugOpen}
+        onClose={() => setIsDigitalHugOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Phase 25: Surprise Me Modal Overlay */}
+      <SurpriseMeModal
+        isOpen={isSurpriseMeOpen}
+        onClose={() => setIsSurpriseMeOpen(false)}
+        currentUser={currentUser}
+        audioState={audioState}
+      />
+
+      {/* Phase 24: Memory Jar Modal Overlay */}
+      <MemoryJarModal
+        isOpen={isMemoryJarOpen}
+        onClose={() => setIsMemoryJarOpen(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Phase 23: Memory Timeline Modal Overlay */}
+      <MemoryTimelineModal
+        isOpen={isMemoryTimelineOpen}
+        onClose={() => setIsMemoryTimelineOpen(false)}
+      />
+
+      {/* Phase 22: Daily Mood History Modal Overlay */}
+      <MoodHistoryModal
+        isOpen={isMoodHistoryOpen}
+        onClose={() => setIsMoodHistoryOpen(false)}
+        currentUser={currentUser}
+        onUpdateToday={() => {
+          setIsMoodHistoryOpen(false);
+          setIsHeartCheckInDone(false);
+        }}
+      />
+
+      {/* Phase 19: Open When Modal Overlay */}
+      <OpenWhenModal
+        isOpen={isOpenWhenOpen}
+        onClose={() => setIsOpenWhenOpen(false)}
+      />
+
+      {/* Phase 18: Personal Journal Modal Overlay */}
+      <JournalModal
+        isOpen={isJournalOpen}
+        onClose={() => setIsJournalOpen(false)}
+      />
+
+      {/* Phase 17: Garden Discovery Toast & Progress Pill */}
+      <GardenDiscoveryToast
+        activeDiscovery={activeGardenDiscovery}
+        onDismiss={() => setActiveGardenDiscovery(null)}
+        discoveredList={gardenDiscoveries}
+      />
+
+      {/* Phase 14: Sweet Message Modal Overlay */}
+      <SweetMessageModal
+        isOpen={isSweetMsgOpen}
+        onClose={() => setIsSweetMsgOpen(false)}
+      />
+
+      {/* Phase 13: Secret Vault Discovery Trigger & Modal */}
+      <SecretVaultTrigger onOpenVault={() => setIsVaultOpen(true)} />
+      <SecretVaultModal
+        isOpen={isVaultOpen}
+        onClose={() => setIsVaultOpen(false)}
+      />
+
+      {/* Phase 12: Daily Mood Check-in Overlay Modal */}
+      <MoodCheckInModal
+        isOpen={isMoodModalOpen}
+        onClose={() => setIsMoodModalOpen(false)}
+      />
 
       {/* Secret Discovery Modal */}
       <DiscoveryModal

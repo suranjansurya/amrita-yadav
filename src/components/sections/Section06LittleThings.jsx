@@ -2,9 +2,9 @@ import React from 'react';
 import { secretsData } from '../../data/secretsData';
 import { MotionWrapper } from '../animations/MotionWrapper';
 import { GlassCard } from '../common/GlassCard';
-import { Sparkles, CheckCircle2 } from 'lucide-react';
+import { Sparkles, CheckCircle2, Heart } from 'lucide-react';
 
-export function Section06LittleThings({ onSelectSecret, discoveredIds = [] }) {
+export function Section06LittleThings({ onSelectSecret, discoveredIds = [], onOpenSweetMessage }) {
   const progressPercent = Math.round((discoveredIds.length / secretsData.length) * 100);
 
   return (
@@ -22,17 +22,30 @@ export function Section06LittleThings({ onSelectSecret, discoveredIds = [] }) {
             Tap the floating symbols in this dream space to unlock hidden messages made just for you.
           </p>
 
-          <div className="inline-flex items-center space-x-3 px-5 py-2 rounded-full glass-panel border border-white/90 shadow-md mb-10">
-            <Sparkles size={16} className="text-pink-600" />
-            <span className="text-xs font-bold uppercase tracking-wider text-pink-950">
-              Secrets Discovered: {discoveredIds.length} / {secretsData.length}
-            </span>
-            <div className="w-16 h-2 bg-pink-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-pink-400 to-rose-400 transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              />
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+            <div className="inline-flex items-center space-x-3 px-5 py-2.5 rounded-full glass-panel border border-white/90 shadow-md">
+              <Sparkles size={16} className="text-pink-600 animate-spin" style={{ animationDuration: '6s' }} />
+              <span className="text-xs font-bold uppercase tracking-wider text-pink-950">
+                Secrets Discovered: {discoveredIds.length} / {secretsData.length}
+              </span>
+              <div className="w-16 h-2 bg-pink-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-pink-400 to-rose-400 transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
+
+            {/* Phase 14 Button: Give Me Something Special ✨ */}
+            {onOpenSweetMessage && (
+              <button
+                onClick={onOpenSweetMessage}
+                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center space-x-2 focus:outline-none"
+              >
+                <Heart size={14} className="fill-white" />
+                <span>Give Me Something Special ✨</span>
+              </button>
+            )}
           </div>
         </MotionWrapper>
 

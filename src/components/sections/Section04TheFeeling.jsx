@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { feelingsData } from '../../data/feelingsData';
 import { MotionWrapper } from '../animations/MotionWrapper';
 import { GlassCard } from '../common/GlassCard';
+import { Mail } from 'lucide-react';
 
-export function Section04TheFeeling() {
+export function Section04TheFeeling({ onOpenOpenWhen }) {
   const [activeCardId, setActiveCardId] = useState(null);
 
   return (
@@ -17,9 +18,22 @@ export function Section04TheFeeling() {
           <h2 className="font-heading font-bold text-4xl sm:text-6xl text-pink-950 mb-4">
             The Feelings You Inspire
           </h2>
-          <p className="font-body text-sm sm:text-base text-pink-800/80 max-w-lg mx-auto mb-12">
+          <p className="font-body text-sm sm:text-base text-pink-800/80 max-w-lg mx-auto mb-8">
             Tap or hover over each element to discover what spending time in your warmth feels like.
           </p>
+
+          {/* Phase 19 Trigger Button: Open When... 💌 */}
+          {onOpenOpenWhen && (
+            <div className="mb-10">
+              <button
+                onClick={onOpenOpenWhen}
+                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 text-white font-bold text-xs uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all inline-flex items-center space-x-2 focus:outline-none"
+              >
+                <Mail size={14} />
+                <span>Open When... 💌</span>
+              </button>
+            </div>
+          )}
         </MotionWrapper>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">

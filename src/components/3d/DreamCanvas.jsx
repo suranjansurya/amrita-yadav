@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { useTimeBasedAtmosphere } from '../../hooks/useTimeBasedAtmosphere';
 
 export function DreamCanvas({
   isMobile = false,
@@ -9,6 +10,7 @@ export function DreamCanvas({
   discoveredIds = [],
 }) {
   const mountRef = useRef(null);
+  const atmosphere = useTimeBasedAtmosphere();
 
   // Determine White Lotus blooming stage (0 to 3) based on active section
   const bloomStage = currentSection >= 13 ? 3 : currentSection >= 11 ? 2 : currentSection >= 9 ? 1 : 0;
@@ -16,6 +18,8 @@ export function DreamCanvas({
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // 1. Scene, Camera, Renderer Setup
     const scene = new THREE.Scene();
@@ -41,19 +45,29 @@ export function DreamCanvas({
     }
     container.appendChild(renderer.domElement);
 
-    // 2. Lighting System
-    const ambientLight = new THREE.AmbientLight('#FFF0F5', 0.85 + bloomStage * 0.1);
+    // 2. Lighting System (Dynamic Time-based)
+    const ambientLight = new THREE.AmbientLight(
+      atmosphere.ambientColor,
+      atmosphere.ambientIntensity + bloomStage * 0.1
+    );
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight('#FFE4E1', 1.2 + bloomStage * 0.1);
+    const dirLight = new THREE.DirectionalLight(
+      atmosphere.dirColor,
+      atmosphere.dirIntensity + bloomStage * 0.1
+    );
     dirLight.position.set(5, 8, 5);
     scene.add(dirLight);
 
-    const pointLight = new THREE.PointLight(bloomStage >= 2 ? '#FFF5F8' : '#FFD1DC', 2.0 + bloomStage * 0.5, 8);
+    const pointLight = new THREE.PointLight(
+      atmosphere.pointColor,
+      2.0 + bloomStage * 0.5,
+      8
+    );
     pointLight.position.set(0, 0, 1);
     scene.add(pointLight);
 
-    // 3. Procedural 3D White Lotus Symbol (Blooming Stage Responsive)
+    // 3. Procedural 3D White Lotus Symbol
     const lotusGroup = new THREE.Group();
     lotusGroup.position.set(0, -0.4, 0);
 
@@ -74,8 +88,8 @@ export function DreamCanvas({
 
     const lotusMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#FFFBFD'),
-      emissive: new THREE.Color(bloomStage >= 2 ? '#FFE4E1' : '#FFD1DC'),
-      emissiveIntensity: 0.3 + bloomStage * 0.2,
+      emissive: new THREE.Color(atmosphere.lotusEmissive),
+      emissiveIntensity: atmosphere.lotusEmissiveIntensity + bloomStage * 0.1,
       roughness: 0.2,
       metalness: 0.05,
       clearcoat: 0.8,
@@ -97,7 +111,6 @@ export function DreamCanvas({
     stamenMesh.position.y = 0.2;
     lotusGroup.add(stamenMesh);
 
-    // Spread factor expands lotus petals gradually as bloomStage increases
     const spread = 1.0 + bloomStage * 0.2;
     const ringConfigs = [
       { count: 8, radius: 0.25 * spread, y: 0.35, rotX: 0.4 * spread, scale: 0.65 },
@@ -152,7 +165,7 @@ export function DreamCanvas({
     }
     scene.add(cloudGroup);
 
-    // 5. Glowing Starfield
+    // 5. Glowing Starfield (Dynamic Opacity by Time Period)
     const starCount = isMobile ? 60 : 120 + bloomStage * 20;
     const starGeom = new THREE.BufferGeometry();
     const starPos = new Float32Array(starCount * 3);
@@ -166,7 +179,7 @@ export function DreamCanvas({
       color: '#FFFFFF',
       size: 0.12,
       transparent: true,
-      opacity: 0.85,
+      opacity: atmosphere.starOpacity,
     });
     const starPoints = new THREE.Points(starGeom, starMat);
     scene.add(starPoints);
@@ -231,6 +244,7 @@ export function DreamCanvas({
     let mouseX = 0;
     let mouseY = 0;
     const handleMouseMove = (e) => {
+      if (prefersReducedMotion) return;
       mouseX = (e.clientX / window.innerWidth - 0.5) * 0.8;
       mouseY = (e.clientY / window.innerHeight - 0.5) * 0.5;
     };
@@ -250,34 +264,37 @@ export function DreamCanvas({
 
     const animate = () => {
       const t = clock.getElapsedTime();
+      const speedMult = prefersReducedMotion ? 0.2 : atmosphere.particleSpeed;
 
-      lotusGroup.rotation.y = Math.sin(t * 0.15) * 0.12 + t * 0.05;
-      lotusGroup.position.y = -0.4 + Math.sin(t * 0.8) * 0.08;
+      lotusGroup.rotation.y = Math.sin(t * 0.15 * speedMult) * 0.12 + t * 0.05 * speedMult;
+      lotusGroup.position.y = -0.4 + Math.sin(t * 0.8 * speedMult) * 0.08;
 
       pointLight.intensity = enterGlow ? 4.0 : 2.0 + bloomStage * 0.5;
 
       clouds.forEach((c, idx) => {
-        c.group.position.x = c.initialX + Math.sin(t * c.speed + idx) * 2.0;
-        c.group.position.y = c.y + Math.cos(t * c.speed * 0.7 + idx) * 0.3;
+        c.group.position.x = c.initialX + Math.sin(t * c.speed * speedMult + idx) * 2.0;
+        c.group.position.y = c.y + Math.cos(t * c.speed * 0.7 * speedMult + idx) * 0.3;
       });
 
-      starPoints.rotation.y = t * 0.01;
+      starPoints.rotation.y = t * 0.01 * speedMult;
 
       heartsData.forEach((h, idx) => {
-        h.mesh.position.y += h.speed * 0.008;
-        h.mesh.position.x = h.x + Math.sin(t * 0.8 + idx) * 0.2;
+        h.mesh.position.y += h.speed * 0.008 * speedMult;
+        h.mesh.position.x = h.x + Math.sin(t * 0.8 * speedMult + idx) * 0.2;
         if (h.mesh.position.y > 6) h.mesh.position.y = -5;
       });
 
       const positions = particlePoints.geometry.attributes.position.array;
       for (let i = 0; i < particleCount; i++) {
-        positions[i * 3 + 1] += Math.sin(t + i) * 0.002 + 0.001;
+        positions[i * 3 + 1] += (Math.sin(t + i) * 0.002 + 0.001) * speedMult;
         if (positions[i * 3 + 1] > 8) positions[i * 3 + 1] = -8;
       }
       particlePoints.geometry.attributes.position.needsUpdate = true;
 
-      camera.position.x += (mouseX - camera.position.x) * 0.04;
-      camera.position.y += (-mouseY - camera.position.y) * 0.04;
+      if (!prefersReducedMotion) {
+        camera.position.x += (mouseX - camera.position.x) * 0.04;
+        camera.position.y += (-mouseY - camera.position.y) * 0.04;
+      }
       camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
@@ -295,7 +312,7 @@ export function DreamCanvas({
       }
       renderer.dispose();
     };
-  }, [isMobile, enterGlow, bloomStage]);
+  }, [isMobile, enterGlow, bloomStage, atmosphere]);
 
   return (
     <div

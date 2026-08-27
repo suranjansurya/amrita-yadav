@@ -3,31 +3,49 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export function useAudioPlayer(customAudioSrc = '/music/song.mp3') {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(0.6);
-  const [audioLoaded, setAudioLoaded] = useState(false);
-  const [trackTitle, setTrackTitle] = useState("Mere Nishan — Amrita's Theme");
+  const [volume, setVolume] = useState(() => {
+    return parseFloat(localStorage.getItem('amrita_audio_volume') || '0.7');
+  });
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isLooping, setIsLooping] = useState(true);
+  const [trackTitle, setTrackTitle] = useState('Mere Nishan');
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [audioError, setAudioError] = useState(false);
 
   const audioRef = useRef(null);
 
   useEffect(() => {
     const audio = new Audio();
     audio.src = customAudioSrc;
-    audio.loop = true;
+    audio.loop = isLooping;
     audio.preload = 'auto';
     audio.volume = volume;
 
-    const handleCanPlay = () => {
-      setAudioLoaded(true);
-      setTrackTitle("Mere Nishan — Amrita's Theme");
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration || 0);
+      setAudioError(false);
+    };
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime || 0);
     };
 
     const handleError = (e) => {
-      console.warn("[AudioPlayer] HTML5 audio error for:", customAudioSrc, e);
-      setAudioLoaded(true);
+      console.warn('[AudioPlayer] Audio loading error for:', customAudioSrc, e);
+      setAudioError(true);
     };
 
-    audio.addEventListener('canplaythrough', handleCanPlay);
+    const handleEnded = () => {
+      if (!audio.loop) {
+        setIsPlaying(false);
+      }
+    };
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('error', handleError);
+    audio.addEventListener('ended', handleEnded);
 
     audioRef.current = audio;
 
@@ -36,21 +54,24 @@ export function useAudioPlayer(customAudioSrc = '/music/song.mp3') {
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
+          setIsPlaying(false); // require user interaction for full active status or start
           setIsPlaying(true);
-          console.log("[AudioPlayer] Autoplay started successfully for Mere Nishan.mp3");
+          setAutoplayBlocked(false);
+          console.log('[AudioPlayer] Autoplay started successfully for Mere Nishan');
         })
         .catch(() => {
-          // Autoplay blocked by browser policy -> wait for first user gesture
-          console.log("[AudioPlayer] Autoplay prevented by browser, waiting for user click/tap...");
-          
+          console.log('[AudioPlayer] Autoplay prevented by browser, waiting for user click/tap...');
+          setAutoplayBlocked(true);
+
           const handleFirstInteraction = () => {
             if (audioRef.current) {
               audioRef.current.play()
                 .then(() => {
                   setIsPlaying(true);
-                  console.log("[AudioPlayer] Unlocked audio playback on user gesture!");
+                  setAutoplayBlocked(false);
+                  console.log('[AudioPlayer] Unlocked audio playback on user gesture!');
                 })
-                .catch((err) => console.warn("[AudioPlayer] User interaction play error:", err));
+                .catch((err) => console.warn('[AudioPlayer] User gesture play error:', err));
             }
             window.removeEventListener('pointerdown', handleFirstInteraction);
             window.removeEventListener('click', handleFirstInteraction);
@@ -64,8 +85,10 @@ export function useAudioPlayer(customAudioSrc = '/music/song.mp3') {
     }
 
     return () => {
-      audio.removeEventListener('canplaythrough', handleCanPlay);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('error', handleError);
+      audio.removeEventListener('ended', handleEnded);
       audio.pause();
     };
   }, [customAudioSrc]);
@@ -78,8 +101,11 @@ export function useAudioPlayer(customAudioSrc = '/music/song.mp3') {
       setIsPlaying(false);
     } else {
       audioRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch((err) => console.warn("[AudioPlayer] Toggle play error:", err));
+        .then(() => {
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch((err) => console.warn('[AudioPlayer] Toggle play error:', err));
     }
   }, [isPlaying]);
 
@@ -94,26 +120,59 @@ export function useAudioPlayer(customAudioSrc = '/music/song.mp3') {
 
   const changeVolume = useCallback((newVol) => {
     setVolume(newVol);
+    localStorage.setItem('amrita_audio_volume', newVol.toString());
     if (audioRef.current) {
       audioRef.current.volume = newVol;
     }
   }, []);
 
+  const seek = useCallback((newTime) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  }, []);
+
+  const toggleLoop = useCallback(() => {
+    const nextLoop = !isLooping;
+    setIsLooping(nextLoop);
+    if (audioRef.current) {
+      audioRef.current.loop = nextLoop;
+    }
+  }, [isLooping]);
+
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   return {
     isPlaying,
     isMuted,
     volume,
-    audioLoaded,
+    currentTime,
+    duration,
+    isLooping,
     trackTitle,
+    autoplayBlocked,
+    audioError,
+    formatTime,
     togglePlay,
     toggleMute,
     changeVolume,
+    seek,
+    toggleLoop,
     startAudio: () => {
       if (audioRef.current) {
         audioRef.current.play()
-          .then(() => setIsPlaying(true))
-          .catch((err) => console.warn("[AudioPlayer] Start audio error:", err));
+          .then(() => {
+            setIsPlaying(true);
+            setAutoplayBlocked(false);
+          })
+          .catch((err) => console.warn('[AudioPlayer] Start audio error:', err));
       }
-    }
+    },
   };
 }
