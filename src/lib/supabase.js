@@ -153,7 +153,7 @@ export const DEFAULT_DAILY_MESSAGES = [
   { id: 'msg-3', category: 'Night', title: 'Sweet Dreams 🌙', message: 'Leave the heavy parts of today behind. Tomorrow is a brand new little beginning. 🌙❤️', is_active: true },
 ];
 
-export async function saveMoodCheckIn({ mood, message = '' }) {
+export async function saveMoodCheckIn({ mood, message = '', day_feeling = '', heart_word = '', shared_message = '' }) {
   if (!ALLOWED_MOODS.includes(mood)) {
     throw new Error('Invalid mood value selected');
   }
@@ -201,6 +201,17 @@ export async function saveMoodCheckIn({ mood, message = '' }) {
       console.warn('[Supabase] Connection exception, saved to local cache:', e);
     }
   }
+
+  // Phase 32: Log user activity for Mood Check-in
+  saveUserActivity({
+    event_type: 'mood_checkin',
+    title: '❤️ Mood Check-in',
+    description: `Mood: ${mood}`,
+    metadata: {
+      question: 'How are you feeling today?',
+      answer: `${mood}${day_feeling ? ' • ' + day_feeling : ''}${heart_word ? ' • ' + heart_word : ''}${shared_message ? ' • ' + shared_message : ''}`,
+    },
+  });
 
   return entry;
 }
@@ -300,6 +311,17 @@ export async function saveJournalEntry({ mood = '', journal_text }) {
       console.warn('[Supabase] Journal connection exception, saved to local cache:', e);
     }
   }
+
+  // Phase 32: Log user activity for Journal Entry
+  saveUserActivity({
+    event_type: 'journal_created',
+    title: '📖 Created Journal Entry',
+    description: `Journal: ${entry.journal_text.substring(0, 40)}...`,
+    metadata: {
+      question: 'Your personal thought / journal entry',
+      answer: entry.journal_text,
+    },
+  });
 
   return entry;
 }
@@ -441,6 +463,18 @@ export async function saveOrUpdateHeartCheckIn({
       console.warn('[Supabase] Upsert exception:', e);
     }
   }
+
+  // Phase 32: Log user activity for Heart Check-in
+  saveUserActivity({
+    event_type: 'mood_checkin',
+    title: '❤️ Heart Check-in',
+    description: `Mood: ${mood}`,
+    metadata: {
+      question: 'How are you feeling today?',
+      answer: `${mood} • ${day_feeling}${heart_word ? ' • ' + heart_word : ''}${shared_message ? ' • ' + shared_message : ''}`,
+    },
+    user_id,
+  });
 
   return updatedEntry;
 }
@@ -737,6 +771,18 @@ export async function saveUserFavoriteMemory({ user_id = 'usr-amritayadav', memo
     }
   }
 
+  // Phase 32: Log user activity for Favorite Saved
+  saveUserActivity({
+    event_type: 'favorite_saved',
+    title: '🫙 Saved Favorite',
+    description: `Saved: ${favEntry.title}`,
+    metadata: {
+      question: 'Favorite Saved',
+      answer: `${favEntry.title} • ${favEntry.message}`,
+    },
+    user_id,
+  });
+
   return favEntry;
 }
 
@@ -815,6 +861,18 @@ export async function incrementUserHugCount(user_id = 'usr-amritayadav') {
       console.warn('[Supabase] Hug count update exception:', e);
     }
   }
+
+  // Phase 32: Log user activity for Digital Hug
+  saveUserActivity({
+    event_type: 'digital_hug',
+    title: '🤗 Received Digital Hug',
+    description: `Total hugs received: ${current}`,
+    metadata: {
+      question: 'Digital Hug Requested',
+      answer: 'Sending you the biggest digital hug imaginable. ❤️',
+    },
+    user_id,
+  });
 
   return current;
 }
@@ -1094,6 +1152,18 @@ export async function saveUserStarDiscovery(user_id = 'usr-amritayadav', starId)
   if (!local.includes(starId)) {
     local.push(starId);
     localStorage.setItem(`amrita_star_discoveries_${user_id}`, JSON.stringify(local));
+
+    // Phase 32: Log user activity for Star Discovery
+    saveUserActivity({
+      event_type: 'star_discovered',
+      title: '🌌 Discovered Star',
+      description: `Discovered star: ${starId}`,
+      metadata: {
+        question: 'Star Discovered',
+        answer: `Star ID: ${starId}`,
+      },
+      user_id,
+    });
   }
   return local;
 }
@@ -1224,10 +1294,6 @@ export async function fetchJustForYouData(user_id = 'usr-amritayadav') {
   };
 }
 
-/* ===================================================
-   PHASE 30: ADMIN RESPONSE MANAGEMENT HELPERS
-   =================================================== */
-
 export async function fetchAllUserResponses(filter = 'All') {
   const [hData, jData, fData] = await Promise.all([
     fetchHeartCheckIns('All'),
@@ -1239,6 +1305,8 @@ export async function fetchAllUserResponses(filter = 'All') {
     id: h.id,
     type: '❤️ Heart Check-in',
     responseType: 'heart',
+    question: 'How are you feeling today?',
+    answer: h.shared_message || h.heart_word || h.day_feeling || h.mood,
     text: h.shared_message || h.heart_word || h.day_feeling || h.mood,
     mood: h.mood,
     user_id: h.user_id || 'amritayadav',
@@ -1251,6 +1319,8 @@ export async function fetchAllUserResponses(filter = 'All') {
     id: j.id,
     type: '📖 Journal Entry',
     responseType: 'journal',
+    question: 'Your personal thought / journal entry',
+    answer: j.journal_text,
     text: j.journal_text,
     mood: j.mood || 'Thoughtful',
     user_id: j.user_id || 'amritayadav',
@@ -1263,6 +1333,8 @@ export async function fetchAllUserResponses(filter = 'All') {
     id: f.id,
     type: '🫙 Saved Favorite',
     responseType: 'favorite',
+    question: 'Favorite Saved',
+    answer: f.title + ': ' + (f.message || ''),
     text: f.title + ': ' + (f.message || ''),
     user_id: f.user_id || 'amritayadav',
     created_at: f.created_at || new Date().toISOString(),
@@ -1311,4 +1383,94 @@ export async function deleteUserResponse(responseType, responseId) {
   }
 
   return true;
+}
+
+/* ===================================================
+   PHASE 32: CENTRAL USER ACTIVITY TRACKING HELPERS
+   =================================================== */
+
+export async function saveUserActivity({
+  event_type,
+  title,
+  description = '',
+  metadata = {},
+  user_id = 'usr-amritayadav',
+}) {
+  const now = new Date();
+  const id = `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const record = {
+    id,
+    user_id,
+    event_type,
+    title,
+    description,
+    metadata,
+    created_at: now.toISOString(),
+    date: now.toLocaleDateString(),
+    time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+
+  const localActivities = JSON.parse(localStorage.getItem('amrita_user_activities') || '[]');
+  const updatedLocal = [record, ...localActivities];
+  localStorage.setItem('amrita_user_activities', JSON.stringify(updatedLocal));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('user_activity').insert([record]);
+    } catch (e) {
+      console.warn('[Supabase] Activity insert exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function fetchUserActivityTimeline(user_id = 'usr-amritayadav', filter = 'All') {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('user_activity')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch activity timeline failed, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    records = JSON.parse(localStorage.getItem('amrita_user_activities') || '[]');
+  }
+
+  if (filter !== 'All') {
+    records = records.filter((r) => r.event_type === filter || r.title.includes(filter));
+  }
+
+  return records.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export function exportUserAnswersCSV(responses) {
+  const headers = ['User', 'Question', 'Answer', 'Date', 'Time'];
+  const rows = responses.map((r) => [
+    `"${r.user_id || 'amritayadav'}"`,
+    `"${(r.question || 'User Response').replace(/"/g, '""')}"`,
+    `"${(r.answer || r.text || '').replace(/"/g, '""')}"`,
+    `"${r.date || ''}"`,
+    `"${r.time || ''}"`,
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `user_answers_export_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

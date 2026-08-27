@@ -1,40 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { fetchSurprisePool, saveUserFavoriteMemory } from '../../lib/supabase';
-import { Heart, Sparkles, X, Gift, Music, Lock, Unlock, Play, ArrowLeft, BookmarkCheck, RefreshCw } from 'lucide-react';
+import { fetchSurprisePool, saveUserFavoriteMemory, saveUserActivity } from '../../lib/supabase';
+import { Gift, Sparkles, X, Heart, Music, MessageCircle, Moon, Zap, Smile } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const BEAUTIFUL_QUOTES = [
-  'Some souls make the world softer just by being in it. ✨',
-  'You are the calm in every storm and the smile in every thought. 🌸',
-  'No matter where life takes us, you will always be my favorite place. ❤️',
-  'The sweetest things in life are simple: a gentle word, a quiet moment, and you. 🌷',
-];
-
-const COMFORT_RESPONSES = {
-  '😴 Tired': "You've done enough for today. Take a breath and be gentle with yourself. 🌙❤️",
-  '😔 Low': "Not every day has to be a good day. It's okay to slow down and just be. 🤍",
-  '😐 Okay': "Everything doesn't have to be perfect. You are doing just fine. 🌸",
-  '😌 Peaceful': "Keep this peaceful little feeling close to your heart today. ✨",
-  '😊 Happy': "Keep that beautiful smile going—it brightens everything around you! ❤️",
-};
-
-export function SurpriseMeModal({ isOpen, onClose, currentUser, audioState, onTriggerGarden }) {
+export function SurpriseMeModal({ isOpen, onClose, currentUser, audioState }) {
   const [pool, setPool] = useState({ jarMemories: [], timelineMemories: [], latestHeart: null });
-  const [isLoading, setIsLoading] = useState(true);
-
+  const [currentSurprise, setCurrentSurprise] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [countdown, setCountdown] = useState(3);
-  const [currentSurprise, setCurrentSurprise] = useState(null);
-  const [lastSurpriseType, setLastSurpriseType] = useState('');
+  const [lastSurpriseType, setLastSurpriseType] = useState(null);
   const [saveMsg, setSaveMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
-      loadSurpriseData();
+      loadSurprisePool();
     }
   }, [isOpen]);
 
-  const loadSurpriseData = async () => {
+  const loadSurprisePool = async () => {
     setIsLoading(true);
     try {
       const pData = await fetchSurprisePool(currentUser?.userId || 'usr-amritayadav');
@@ -70,110 +54,138 @@ export function SurpriseMeModal({ isOpen, onClose, currentUser, audioState, onTr
     if (dataPool.timelineMemories.length > 0) types.push('memory');
     if (dataPool.jarMemories.length > 0) types.push('jar');
 
-    // Avoid immediate consecutive repetition if alternatives exist
     let chosenType = types[Math.floor(Math.random() * types.length)];
     if (chosenType === lastSurpriseType && types.length > 1) {
-      chosenType = types.find((t) => t !== lastSurpriseType) || chosenType;
+      const filtered = types.filter((t) => t !== lastSurpriseType);
+      chosenType = filtered[Math.floor(Math.random() * filtered.length)];
     }
     setLastSurpriseType(chosenType);
 
+    let surpriseObj = null;
+
     if (chosenType === 'sweet') {
-      setCurrentSurprise({
+      surpriseObj = {
         type: 'sweet',
         badge: '💌 Sweet Message',
-        title: 'Just for you... 💌',
-        message: 'No matter what happens today, remember that you are deeply cherished.',
-      });
+        icon: <MessageCircle className="text-pink-500" size={24} />,
+        title: 'A Little Sweet Note ❤️',
+        message: 'You have a gentle way of bringing warmth into every room you enter. Never lose your sparkle. ✨',
+      };
     } else if (chosenType === 'memory' && dataPool.timelineMemories.length > 0) {
-      const randMem = dataPool.timelineMemories[Math.floor(Math.random() * dataPool.timelineMemories.length)];
-      setCurrentSurprise({
+      const mem = dataPool.timelineMemories[Math.floor(Math.random() * dataPool.timelineMemories.length)];
+      surpriseObj = {
         type: 'memory',
         badge: '❤️ Memory',
-        title: `Remember this? ❤️ ${randMem.title}`,
-        message: randMem.short_description,
-        date: randMem.memory_date,
-        image: randMem.image_url,
-      });
+        icon: <Heart className="text-rose-500 fill-rose-400" size={24} />,
+        title: mem.title,
+        message: mem.short_description || mem.full_description,
+        extraDate: mem.memory_date,
+      };
     } else if (chosenType === 'jar' && dataPool.jarMemories.length > 0) {
-      const randJar = dataPool.jarMemories[Math.floor(Math.random() * dataPool.jarMemories.length)];
-      setCurrentSurprise({
+      const jar = dataPool.jarMemories[Math.floor(Math.random() * dataPool.jarMemories.length)];
+      surpriseObj = {
         type: 'jar',
-        badge: '🫙 Memory Jar Note',
-        title: randJar.title,
-        message: randJar.message,
-        date: randJar.memory_date,
-      });
+        badge: '🫙 Memory Jar',
+        icon: <Sparkles className="text-amber-500" size={24} />,
+        title: jar.title,
+        message: jar.message,
+      };
     } else if (chosenType === 'quote') {
-      const q = BEAUTIFUL_QUOTES[Math.floor(Math.random() * BEAUTIFUL_QUOTES.length)];
-      setCurrentSurprise({
+      const quotes = [
+        '“Some souls make the world a gentler place just by being in it.”',
+        '“You are capable of creating magic in the quietest moments.”',
+        '“Soft hearts hold the greatest strength.”',
+      ];
+      surpriseObj = {
         type: 'quote',
         badge: '🌸 Beautiful Quote',
-        title: 'A Little Thought ✨',
-        message: q,
-      });
+        icon: <Smile className="text-pink-500" size={24} />,
+        title: 'Thought for You 🌸',
+        message: quotes[Math.floor(Math.random() * quotes.length)],
+      };
     } else if (chosenType === 'hug') {
-      setCurrentSurprise({
+      surpriseObj = {
         type: 'hug',
         badge: '🤗 Digital Hug',
-        title: 'Come here... 🤗❤️',
-        message: 'Sending you a warm, gentle hug across the screen. You are never alone. ❤️',
-      });
+        icon: <Heart className="text-rose-500 fill-rose-500 animate-pulse" size={24} />,
+        title: 'Warm Digital Hug 🤗',
+        message: 'Sending you the biggest, coziest digital hug right across the sky. Hold on tight! ❤️',
+      };
     } else if (chosenType === 'explosion') {
       confetti({
         particleCount: 80,
         spread: 100,
-        origin: { y: 0.5 },
-        colors: ['#FFB6C1', '#FF69B4', '#FFD1DC', '#FFF0F5'],
+        origin: { y: 0.6 },
+        colors: ['#FFB6C1', '#FF69B4', '#FFC0CB', '#E6E6FA'],
       });
-      setCurrentSurprise({
+      surpriseObj = {
         type: 'explosion',
         badge: '✨ Heart Explosion',
-        title: 'Love Shower! ✨❤️',
-        message: 'Because you deserve a little extra love today. ❤️',
-      });
-    } else if (chosenType === 'comfort') {
-      const moodVal = dataPool.latestHeart?.mood || '😊 Happy';
-      const cMsg = COMFORT_RESPONSES[moodVal] || COMFORT_RESPONSES['😊 Happy'];
-      setCurrentSurprise({
-        type: 'comfort',
-        badge: '🌙 Comfort Message',
-        title: 'Thinking of you... 🌙',
-        message: cMsg,
-      });
+        icon: <Zap className="text-amber-400 fill-amber-300" size={24} />,
+        title: 'Sparkle Burst! ✨',
+        message: 'A sudden burst of love and sparkles just to make you smile today! 🌸🥰',
+      };
     } else if (chosenType === 'music') {
       if (audioState && !audioState.isPlaying) {
-        audioState.startAudio();
+        audioState.togglePlay();
       }
-      setCurrentSurprise({
+      surpriseObj = {
         type: 'music',
         badge: '🎵 Music Moment',
-        title: 'A Melody For You 🎵',
-        message: 'Maybe this song is exactly what you need right now... Mere Nishan. ✨',
-      });
+        icon: <Music className="text-purple-500" size={24} />,
+        title: 'Mere Nishan Playing 🎵',
+        message: 'Let this soft melody wrap around your thoughts and bring you peace. 🎵❤️',
+      };
+    } else if (chosenType === 'comfort') {
+      surpriseObj = {
+        type: 'comfort',
+        badge: '🌙 Comfort Message',
+        icon: <Moon className="text-indigo-400" size={24} />,
+        title: 'Restful Peace 🌙',
+        message: 'Take a slow, deep breath... let go of whatever felt heavy today. You are doing great. ❤️',
+      };
     } else {
-      setCurrentSurprise({
+      surpriseObj = {
         type: 'secret',
         badge: '🔐 Secret Message',
-        title: '🔐 You found something...',
-        message: 'You have a quiet light that makes everything around you feel calm and special. ✨',
-      });
+        icon: <Sparkles className="text-pink-500" size={24} />,
+        title: 'Secret Little Note 🔐',
+        message: 'This little world was built with so much care just to remind you how special you are. ✨',
+      };
     }
+
+    setCurrentSurprise(surpriseObj);
+
+    // Track total surprises opened in localStorage
+    const uId = currentUser?.userId || 'usr-amritayadav';
+    const sCount = Number(localStorage.getItem(`amrita_surprise_count_${uId}`) || '0') + 1;
+    localStorage.setItem(`amrita_surprise_count_${uId}`, sCount.toString());
+
+    // Phase 32 Activity Tracking
+    saveUserActivity({
+      event_type: 'surprise_opened',
+      title: '🎁 Opened Surprise',
+      description: `Opened: ${surpriseObj.badge}`,
+      metadata: {
+        question: 'Surprise Opened',
+        answer: `${surpriseObj.badge} • ${surpriseObj.title}: ${surpriseObj.message}`,
+      },
+      user_id: uId,
+    });
   };
 
-  const handleSaveSurprise = async () => {
+  const handleSaveFavorite = async () => {
     if (!currentSurprise) return;
-
     try {
       await saveUserFavoriteMemory({
         user_id: currentUser?.userId || 'usr-amritayadav',
-        memory_id: `surprise-${Date.now()}`,
+        memory_id: `surp-${Date.now()}`,
         memory_data: {
           title: currentSurprise.title,
           short_description: currentSurprise.message,
           category: currentSurprise.badge,
         },
       });
-
       setSaveMsg('Saved to your favorites ❤️');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (e) {
@@ -184,10 +196,8 @@ export function SurpriseMeModal({ isOpen, onClose, currentUser, audioState, onTr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/40 backdrop-blur-lg animate-fadeIn select-none">
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-lg w-full border-2 border-pink-300 shadow-2xl bg-white/95 text-center relative">
-        
-        {/* Close Button */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/40 backdrop-blur-md animate-fadeIn select-none">
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full border-2 border-pink-300 shadow-2xl bg-white/95 text-pink-950 text-center relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 rounded-full bg-pink-100/80 text-pink-950 hover:bg-pink-200 focus:outline-none transition-colors"
@@ -196,117 +206,83 @@ export function SurpriseMeModal({ isOpen, onClose, currentUser, audioState, onTr
           <X size={18} />
         </button>
 
-        {/* 1. Countdown Animation View */}
-        {isAnimating ? (
-          <div className="py-12 space-y-6 animate-pulse">
-            <div className="w-16 h-16 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mx-auto shadow-inner">
-              <Gift size={32} className="animate-spin" />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="font-heading font-extrabold text-2xl text-pink-950">
-                Wait... something special is coming... ❤️
-              </h3>
-              <p className="font-heading font-extrabold text-5xl text-gradient-rose">
-                {countdown}
-              </p>
-            </div>
+        <div className="space-y-2 mb-4">
+          <div className="w-14 h-14 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mx-auto shadow-inner">
+            <Gift size={28} />
           </div>
-        ) : (
-          /* 2. Revealed Surprise View */
-          <div className="space-y-6 animate-scaleUp text-left">
-            
-            {/* Header Badge */}
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <span className="px-3.5 py-1 rounded-full bg-pink-100 text-pink-800 font-bold text-xs uppercase tracking-wider flex items-center space-x-1">
-                <Gift size={13} />
-                <span>{currentSurprise?.badge || '🎁 Surprise'}</span>
-              </span>
+          <h2 className="font-heading font-extrabold text-2xl text-pink-950">
+            🎁 Surprise Me
+          </h2>
+          <p className="text-xs font-semibold text-pink-700">
+            You never know what's waiting for you... ✨
+          </p>
+        </div>
 
-              <span className="text-xs font-bold text-pink-600">Phase 25 Active</span>
+        {isAnimating || isLoading ? (
+          <div className="py-12 space-y-4">
+            <div className="text-4xl font-extrabold text-pink-600 animate-bounce">
+              {countdown > 0 ? countdown : '✨'}
             </div>
+            <p className="text-xs font-bold text-pink-800 uppercase tracking-widest animate-pulse">
+              Preparing your surprise...
+            </p>
+          </div>
+        ) : currentSurprise ? (
+          <div className="space-y-4 animate-scaleUp">
+            <span className="px-3.5 py-1 rounded-full bg-pink-100 text-pink-800 font-bold text-xs uppercase tracking-wider inline-flex items-center space-x-1.5 shadow-xs">
+              {currentSurprise.icon}
+              <span>{currentSurprise.badge}</span>
+            </span>
 
-            {/* Hug Visual Animation */}
-            {currentSurprise?.type === 'hug' && (
-              <div className="relative py-6 flex justify-center">
-                <div className="w-24 h-24 rounded-full bg-pink-200/80 animate-ping absolute inset-0 m-auto" />
-                <div className="w-20 h-20 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white flex items-center justify-center relative z-10 shadow-lg">
-                  <Heart size={40} className="fill-white animate-bounce" />
-                </div>
-              </div>
-            )}
-
-            {/* Memory Image if available */}
-            {currentSurprise?.image && (
-              <div className="rounded-2xl overflow-hidden shadow-md max-h-48 w-full bg-pink-50">
-                <img src={currentSurprise.image} alt="Memory" className="w-full h-full object-cover" />
-              </div>
-            )}
-
-            {/* Surprise Content */}
-            <div className="space-y-3">
-              <h2 className="font-heading font-extrabold text-2xl text-pink-950">
-                {currentSurprise?.title}
-              </h2>
-
-              <p className="font-script text-2xl text-pink-800 leading-relaxed italic bg-pink-50/60 p-4 rounded-2xl border border-pink-100">
-                "{currentSurprise?.message}"
+            <div className="p-5 rounded-2xl bg-pink-50/80 border border-pink-200/80 shadow-xs space-y-2">
+              <h3 className="font-heading font-bold text-lg text-pink-950">
+                {currentSurprise.title}
+              </h3>
+              <p className="font-script text-2xl text-pink-900 leading-relaxed italic">
+                "{currentSurprise.message}"
               </p>
-
-              {currentSurprise?.type === 'music' && (
-                <div className="pt-2">
-                  <button
-                    onClick={() => audioState && audioState.togglePlay()}
-                    className="px-5 py-2.5 rounded-full bg-pink-500 text-white font-bold text-xs uppercase tracking-wider flex items-center space-x-2 shadow-md hover:bg-pink-600"
-                  >
-                    <Play size={14} />
-                    <span>{audioState?.isPlaying ? 'Pause Song 🎵' : 'Play Mere Nishan 🎵'}</span>
-                  </button>
-                </div>
+              {currentSurprise.extraDate && (
+                <span className="text-[11px] font-semibold text-pink-600 block">
+                  {currentSurprise.extraDate}
+                </span>
               )}
             </div>
 
             {saveMsg && (
-              <p className="text-xs font-bold text-green-700 flex items-center space-x-1 animate-bounce">
-                <BookmarkCheck size={14} />
-                <span>{saveMsg}</span>
+              <p className="text-xs font-bold text-green-700 animate-bounce">
+                {saveMsg}
               </p>
             )}
 
-            {/* Navigation Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-pink-100">
+            <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={handleSaveSurprise}
-                className="px-4 py-2.5 rounded-full bg-white border border-pink-300 text-pink-950 font-bold text-xs uppercase tracking-wider hover:bg-pink-100 flex items-center space-x-1 shadow-xs"
+                onClick={handleSaveFavorite}
+                className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1 hover:bg-pink-200 transition-colors"
               >
-                <Heart size={13} className="fill-rose-400 text-rose-500" />
-                <span>Keep this</span>
+                <Heart size={14} className="fill-rose-500 text-rose-500" />
+                <span>❤️ Keep this</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => triggerNewSurprise(pool)}
-                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1"
+                className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center justify-center space-x-1"
               >
-                <RefreshCw size={13} />
-                <span>Surprise Me Again</span>
+                <Sparkles size={14} />
+                <span>✨ Surprise Again</span>
               </button>
             </div>
 
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-xs font-bold text-pink-600 hover:text-pink-900 underline focus:outline-none"
-              >
-                ← Back to My World
-              </button>
-            </div>
-
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs font-bold text-pink-600 hover:text-pink-900 underline block mx-auto pt-2"
+            >
+              ← Back to My World
+            </button>
           </div>
-        )}
-
+        ) : null}
       </div>
     </div>
   );

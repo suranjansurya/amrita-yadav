@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { openWhenData } from '../../data/openWhenData';
+import { saveUserActivity, saveUserFavoriteMemory } from '../../lib/supabase';
 import { Mail, Heart, Sparkles, X, ArrowLeft, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -22,9 +23,39 @@ export function OpenWhenModal({ isOpen, onClose }) {
       colors: ['#FFF0F5', '#FFD1DC', '#F5E1A4', '#FFB6C1'],
     });
 
+    // Phase 32 Activity Tracking
+    saveUserActivity({
+      event_type: 'open_when_opened',
+      title: '💌 Opened Letter: ' + env.title,
+      description: `Opened: ${env.title}`,
+      metadata: {
+        question: `Open When... ${env.title}`,
+        answer: env.content,
+      },
+    });
+
     setTimeout(() => {
       setIsOpeningAnim(false);
     }, 600);
+  };
+
+  const handleKeepFavorite = async () => {
+    if (!selectedEnvelope) return;
+    try {
+      await saveUserFavoriteMemory({
+        user_id: 'usr-amritayadav',
+        memory_id: selectedEnvelope.id,
+        memory_data: {
+          title: selectedEnvelope.title,
+          short_description: selectedEnvelope.content,
+          category: '💌 Open When Letter',
+        },
+      });
+      setKeptStatus(true);
+      setTimeout(() => setKeptStatus(false), 3000);
+    } catch (e) {
+      console.warn('[OpenWhenModal] Save favorite error:', e);
+    }
   };
 
   const handleBackToEnvelopes = () => {
@@ -58,89 +89,95 @@ export function OpenWhenModal({ isOpen, onClose }) {
                 Open When... 💌
               </h2>
               <p className="font-script text-xl text-pink-700 mt-1">
-                Jab bhi dil kare, ek chhota sa message tumhare liye.
+                Pick the letter that matches how you feel right now.
               </p>
             </div>
 
-            {/* 5 Envelopes Stack */}
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {openWhenData.map((env) => (
                 <button
                   key={env.id}
                   onClick={() => handleOpenEnvelope(env)}
-                  aria-label={env.title}
-                  className="w-full p-4 rounded-2xl bg-white/80 border border-pink-200 hover:bg-white hover:border-pink-300 shadow-sm hover:shadow-md hover:scale-102 active:scale-98 transition-all flex items-center justify-between group text-left focus:outline-none"
+                  className="w-full p-4 rounded-2xl bg-gradient-to-r from-pink-50/80 to-pink-100/80 border border-pink-200/80 hover:border-pink-300 hover:shadow-md hover:scale-[1.02] transition-all flex items-center justify-between text-left group"
                 >
                   <div className="flex items-center space-x-3">
-                    <span className="text-2xl p-2 bg-pink-50 rounded-xl group-hover:scale-110 transition-transform">
-                      {env.symbol}
-                    </span>
-                    <span className="font-heading font-bold text-sm text-pink-950">
-                      {env.title}
-                    </span>
+                    <div className="w-10 h-10 rounded-full bg-pink-200/60 text-pink-700 flex items-center justify-center group-hover:bg-pink-300/80 transition-colors">
+                      <Mail size={20} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-pink-800 block">
+                        Open When...
+                      </span>
+                      <span className="font-heading font-bold text-base text-pink-950">
+                        {env.title}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center group-hover:bg-pink-500 group-hover:text-white transition-colors">
-                    <Mail size={16} />
-                  </div>
+                  <span className="text-xs font-bold text-pink-600 opacity-80 group-hover:opacity-100">
+                    Open →
+                  </span>
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          /* 2. Opened Letter Card View */
+          /* 2. Unfolded Letter Reader View */
           <div className="space-y-6 animate-scaleUp">
-            <div className="text-center">
-              <span className="text-4xl block mb-2">{selectedEnvelope.symbol}</span>
-              <span className="text-xs font-bold uppercase tracking-widest text-pink-600 block mb-1">
-                {selectedEnvelope.title}
-              </span>
-            </div>
+            <button
+              onClick={handleBackToEnvelopes}
+              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-pink-100/80 text-pink-800 text-xs font-bold hover:bg-pink-200 transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={14} />
+              <span>All Envelopes</span>
+            </button>
 
-            {/* Opened Letter Paper Container */}
-            <div className={`p-6 sm:p-8 rounded-3xl bg-pink-50/70 border border-pink-200 shadow-inner relative transition-transform ${
-              isOpeningAnim ? 'scale-95 opacity-50 blur-sm' : 'scale-100 opacity-100'
-            }`}>
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 text-pink-300">
-                <Heart size={20} className="fill-pink-200" />
+            {isOpeningAnim ? (
+              <div className="py-12 space-y-3">
+                <Mail size={36} className="mx-auto text-pink-500 animate-bounce" />
+                <p className="font-script text-xl text-pink-800">Unfolding your letter...</p>
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-6 rounded-2xl bg-gradient-to-b from-pink-50/90 to-pink-100/50 border border-pink-200/80 shadow-inner text-left space-y-3">
+                  <div className="flex items-center justify-between border-b border-pink-200/60 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-pink-800">
+                      Open When... {selectedEnvelope.title}
+                    </span>
+                    <Sparkles size={16} className="text-pink-500" />
+                  </div>
 
-              <p className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950 leading-relaxed pt-2">
-                "{selectedEnvelope.message}"
-              </p>
-            </div>
+                  <p className="font-script text-2xl text-pink-950 leading-relaxed italic pt-1 whitespace-pre-line">
+                    "{selectedEnvelope.content}"
+                  </p>
+                </div>
 
-            {/* Action Buttons: "Keep this with you ❤️" & "Back ✨" */}
-            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
-              <button
-                onClick={() => setKeptStatus(true)}
-                className={`w-full sm:w-1/2 py-3.5 rounded-full font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center space-x-1.5 focus:outline-none ${
-                  keptStatus
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gradient-to-r from-pink-400 to-rose-400 text-white hover:scale-105 shadow-md'
-                }`}
-              >
-                {keptStatus ? (
-                  <>
-                    <Check size={14} />
-                    <span>Kept in Heart ❤️</span>
-                  </>
-                ) : (
-                  <>
-                    <Heart size={14} className="fill-white" />
-                    <span>Keep this with you ❤️</span>
-                  </>
+                {keptStatus && (
+                  <p className="text-xs font-bold text-green-700 animate-bounce">
+                    Saved to your favorites ❤️
+                  </p>
                 )}
-              </button>
 
-              <button
-                onClick={handleBackToEnvelopes}
-                className="w-full sm:w-1/2 py-3.5 rounded-full bg-pink-100 hover:bg-pink-200 text-pink-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-colors focus:outline-none"
-              >
-                <ArrowLeft size={14} />
-                <span>Back ✨</span>
-              </button>
-            </div>
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleKeepFavorite}
+                    className="flex-1 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-1 hover:bg-pink-200 transition-colors"
+                  >
+                    <Heart size={14} className="fill-rose-500 text-rose-500" />
+                    <span>❤️ Keep this</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBackToEnvelopes}
+                    className="flex-1 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
+                  >
+                    Close Letter ✨
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
