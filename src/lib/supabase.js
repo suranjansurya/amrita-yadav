@@ -1098,10 +1098,6 @@ export async function saveUserStarDiscovery(user_id = 'usr-amritayadav', starId)
   return local;
 }
 
-/* ===================================================
-   PHASE 29: JUST FOR YOU HELPERS
-   =================================================== */
-
 export async function fetchDailyMessages({ includeInactive = false } = {}) {
   let records = [];
 
@@ -1193,7 +1189,6 @@ export async function fetchJustForYouData(user_id = 'usr-amritayadav') {
   const latestJournal = jData[0] || null;
   const userProgress = await evaluateUserProgress(user_id);
 
-  // Deterministic daily message based on date string
   const todayStr = new Date().toDateString();
   let dayHash = 0;
   for (let i = 0; i < todayStr.length; i++) {
@@ -1203,7 +1198,6 @@ export async function fetchJustForYouData(user_id = 'usr-amritayadav') {
   const msgIdx = Math.abs(dayHash) % (dMsgs.length || 1);
   const todayMessage = dMsgs[msgIdx] || DEFAULT_DAILY_MESSAGES[0];
 
-  // Find next incomplete secret unlock
   const nextSecret = secUnlocks.find((s) => (userProgress[s.reqType] || 0) < (s.reqVal || 1)) || null;
 
   return {
@@ -1228,4 +1222,93 @@ export async function fetchJustForYouData(user_id = 'usr-amritayadav') {
       totalConstellations: consts.length,
     },
   };
+}
+
+/* ===================================================
+   PHASE 30: ADMIN RESPONSE MANAGEMENT HELPERS
+   =================================================== */
+
+export async function fetchAllUserResponses(filter = 'All') {
+  const [hData, jData, fData] = await Promise.all([
+    fetchHeartCheckIns('All'),
+    fetchJournalEntries('All'),
+    fetchUserFavoriteMemories('usr-amritayadav'),
+  ]);
+
+  const heartItems = hData.map((h) => ({
+    id: h.id,
+    type: '❤️ Heart Check-in',
+    responseType: 'heart',
+    text: h.shared_message || h.heart_word || h.day_feeling || h.mood,
+    mood: h.mood,
+    user_id: h.user_id || 'amritayadav',
+    created_at: h.created_at || new Date().toISOString(),
+    date: h.date || new Date(h.created_at || Date.now()).toLocaleDateString(),
+    time: h.time || '7:42 PM',
+  }));
+
+  const journalItems = jData.map((j) => ({
+    id: j.id,
+    type: '📖 Journal Entry',
+    responseType: 'journal',
+    text: j.journal_text,
+    mood: j.mood || 'Thoughtful',
+    user_id: j.user_id || 'amritayadav',
+    created_at: j.created_at || new Date().toISOString(),
+    date: j.date || new Date(j.created_at || Date.now()).toLocaleDateString(),
+    time: j.time || '8:15 PM',
+  }));
+
+  const favItems = fData.map((f) => ({
+    id: f.id,
+    type: '🫙 Saved Favorite',
+    responseType: 'favorite',
+    text: f.title + ': ' + (f.message || ''),
+    user_id: f.user_id || 'amritayadav',
+    created_at: f.created_at || new Date().toISOString(),
+    date: new Date(f.created_at || Date.now()).toLocaleDateString(),
+    time: '9:00 PM',
+  }));
+
+  let combined = [...heartItems, ...journalItems, ...favItems];
+
+  if (filter !== 'All') {
+    if (filter === 'heart') combined = combined.filter((i) => i.responseType === 'heart');
+    if (filter === 'journal') combined = combined.filter((i) => i.responseType === 'journal');
+    if (filter === 'favorite') combined = combined.filter((i) => i.responseType === 'favorite');
+  }
+
+  return combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export async function deleteUserResponse(responseType, responseId) {
+  if (responseType === 'heart') {
+    const local = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+    const updated = local.filter((h) => h.id !== responseId);
+    localStorage.setItem('amrita_heart_checkins_history', JSON.stringify(updated));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('heart_checkins').delete().eq('id', responseId);
+      } catch (e) {
+        console.warn('[Supabase] Delete heart checkin exception:', e);
+      }
+    }
+  } else if (responseType === 'journal') {
+    const local = JSON.parse(localStorage.getItem('amrita_journal_history') || '[]');
+    const updated = local.filter((j) => j.id !== responseId);
+    localStorage.setItem('amrita_journal_history', JSON.stringify(updated));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('journal_entries').delete().eq('id', responseId);
+      } catch (e) {
+        console.warn('[Supabase] Delete journal entry exception:', e);
+      }
+    }
+  } else if (responseType === 'favorite') {
+    await deleteUserFavoriteMemory('usr-amritayadav', responseId);
+  }
+
+  return true;
 }

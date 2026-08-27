@@ -27,6 +27,8 @@ import {
   fetchDailyMessages,
   saveDailyMessage,
   deleteDailyMessage,
+  fetchAllUserResponses,
+  deleteUserResponse,
 } from '../lib/supabase';
 import {
   authenticateAdmin,
@@ -65,6 +67,8 @@ import {
   Compass,
   Star,
   Mail,
+  Search,
+  CheckCircle,
 } from 'lucide-react';
 
 export function AdminDashboard({ onExit }) {
@@ -73,14 +77,20 @@ export function AdminDashboard({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('justforyou'); // 'justforyou' | 'constellation' | 'secrets' | 'comfort' | 'users'
+  const [activeTab, setActiveTab] = useState('responses'); // 'responses' | 'justforyou' | 'constellation' | 'users'
   const [filter, setFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState('newest'); // 'newest' | 'oldest'
+
+  const [responsesList, setResponsesList] = useState([]);
   const [dailyMsgsList, setDailyMsgsList] = useState([]);
   const [constList, setConstList] = useState([]);
-  const [secretsList, setSecretsList] = useState([]);
-  const [comfortList, setComfortList] = useState([]);
   const [usersListManaged, setUsersListManaged] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Delete confirmation modal state
+  const [deletingResponseTarget, setDeletingResponseTarget] = useState(null);
+  const [deleteSuccessNotice, setDeleteSuccessNotice] = useState('');
 
   // Form states for Just For You Manager
   const [isDailyMsgFormOpen, setIsDailyMsgFormOpen] = useState(false);
@@ -102,18 +112,15 @@ export function AdminDashboard({ onExit }) {
       const managedUsers = fetchManagedUsers();
       setUsersListManaged(managedUsers);
 
-      if (activeTab === 'justforyou') {
+      if (activeTab === 'responses') {
+        const rData = await fetchAllUserResponses(filter);
+        setResponsesList(rData);
+      } else if (activeTab === 'justforyou') {
         const dData = await fetchDailyMessages({ includeInactive: true });
         setDailyMsgsList(dData);
       } else if (activeTab === 'constellation') {
         const cData = await fetchConstellations({ includeInactive: true });
         setConstList(cData);
-      } else if (activeTab === 'secrets') {
-        const sData = await fetchSecretUnlocks({ includeInactive: true });
-        setSecretsList(sData);
-      } else if (activeTab === 'comfort') {
-        const cmfData = await fetchComfortMessages({ includeInactive: true });
-        setComfortList(cmfData);
       }
     } catch (e) {
       console.error('[AdminDashboard] Fetch error:', e);
@@ -143,11 +150,26 @@ export function AdminDashboard({ onExit }) {
   const handleLogout = () => {
     logoutAdmin();
     setIsAuthenticated(false);
+    setResponsesList([]);
     setDailyMsgsList([]);
     setConstList([]);
-    setSecretsList([]);
-    setComfortList([]);
     if (onExit) onExit();
+  };
+
+  // Response Delete Handlers
+  const handleConfirmDeleteResponse = async () => {
+    if (!deletingResponseTarget) return;
+
+    try {
+      await deleteUserResponse(deletingResponseTarget.responseType, deletingResponseTarget.id);
+      setResponsesList((prev) => prev.filter((r) => r.id !== deletingResponseTarget.id));
+      setDeleteSuccessNotice('Response deleted successfully. ✓');
+      setTimeout(() => setDeleteSuccessNotice(''), 3000);
+    } catch (err) {
+      console.error('[AdminDashboard] Delete response error:', err);
+    } finally {
+      setDeletingResponseTarget(null);
+    }
   };
 
   // Daily Messages Handlers
@@ -254,6 +276,23 @@ export function AdminDashboard({ onExit }) {
     );
   }
 
+  // Filter & Search Responses
+  const filteredResponses = responsesList.filter((r) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      (r.text && r.text.toLowerCase().includes(query)) ||
+      (r.type && r.type.toLowerCase().includes(query)) ||
+      (r.user_id && r.user_id.toLowerCase().includes(query))
+    );
+  }).sort((a, b) => {
+    if (sortOrder === 'newest') {
+      return new Date(b.created_at) - new Date(a.created_at);
+    } else {
+      return new Date(a.created_at) - new Date(b.created_at);
+    }
+  });
+
   return (
     <div className="fixed inset-0 z-50 bg-pink-50 overflow-y-auto p-4 sm:p-8 text-pink-950 font-body select-none">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -268,7 +307,7 @@ export function AdminDashboard({ onExit }) {
               <h1 className="font-heading font-extrabold text-2xl text-pink-950">
                 Amrita's Private Admin
               </h1>
-              <p className="text-xs text-pink-700 font-semibold">Just For You Manager & Owner Controls</p>
+              <p className="text-xs text-pink-700 font-semibold">User Responses & System Controls</p>
             </div>
           </div>
 
@@ -276,23 +315,23 @@ export function AdminDashboard({ onExit }) {
             {/* Tab Navigation */}
             <div className="flex items-center bg-pink-100 p-1 rounded-full text-xs font-bold">
               <button
+                onClick={() => setActiveTab('responses')}
+                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'responses' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
+                }`}
+              >
+                <MessageSquare size={13} />
+                <span>👤 User Responses</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('justforyou')}
                 className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1.5 ${
                   activeTab === 'justforyou' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
                 }`}
               >
                 <Mail size={13} />
-                <span>💌 Just For You Manager</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('constellation')}
-                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1.5 ${
-                  activeTab === 'constellation' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
-                }`}
-              >
-                <Compass size={13} />
-                <span>Constellations</span>
+                <span>💌 Just For You</span>
               </button>
 
               <button
@@ -324,7 +363,171 @@ export function AdminDashboard({ onExit }) {
           </div>
         </div>
 
-        {/* Tab 1: Phase 29 Just For You Manager 💌 */}
+        {deleteSuccessNotice && (
+          <div className="p-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2 animate-fadeIn">
+            <CheckCircle size={16} className="text-emerald-600" />
+            <span>{deleteSuccessNotice}</span>
+          </div>
+        )}
+
+        {/* Tab 1: Phase 30 Admin Response Management 👤 */}
+        {activeTab === 'responses' && (
+          <div className="space-y-6">
+            {/* Search, Filter & Sort Control Bar */}
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="relative w-full sm:w-72">
+                  <Search size={16} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-pink-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search user responses..."
+                    className="w-full pl-10 pr-4 py-2 rounded-full bg-pink-50 border border-pink-200 text-xs font-bold text-pink-950 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-pink-800">Sort:</span>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                    className="px-3 py-1.5 rounded-full bg-pink-50 border border-pink-200 text-xs font-bold text-pink-950 focus:outline-none"
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-pink-100">
+                <button
+                  onClick={() => setFilter('All')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'All' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  All Responses ({responsesList.length})
+                </button>
+                <button
+                  onClick={() => setFilter('heart')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'heart' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  ❤️ Heart Check-ins
+                </button>
+                <button
+                  onClick={() => setFilter('journal')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'journal' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  📖 Journal Entries
+                </button>
+                <button
+                  onClick={() => setFilter('favorite')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'favorite' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  🫙 Saved Favorites
+                </button>
+              </div>
+            </div>
+
+            {/* Response List */}
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
+              {filteredResponses.length === 0 ? (
+                <div className="py-12 text-center text-pink-600 font-semibold text-sm">
+                  No user responses found.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredResponses.map((r) => (
+                    <div
+                      key={r.id}
+                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 font-bold text-[11px]">
+                            {r.type}
+                          </span>
+                          {r.mood && (
+                            <span className="font-heading font-bold text-xs text-pink-900">
+                              {r.mood}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-pink-600">
+                            User: <strong>{r.user_id}</strong>
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-pink-950 font-medium italic">"{r.text}"</p>
+                        
+                        <div className="text-[11px] text-pink-600 flex items-center space-x-2">
+                          <span>{r.date}</span>
+                          <span>•</span>
+                          <span>{r.time}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setDeletingResponseTarget(r)}
+                        className="px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs flex items-center space-x-1 transition-colors self-end sm:self-center"
+                      >
+                        <Trash2 size={14} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Confirmation Modal for Response Deletion */}
+            {deletingResponseTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white text-center border-2 border-pink-300 shadow-2xl space-y-4 animate-scaleUp">
+                  <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                    <Trash2 size={28} />
+                  </div>
+
+                  <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                    Delete this response?
+                  </h3>
+
+                  <p className="text-xs text-pink-700 bg-pink-50 p-3 rounded-xl border border-pink-100 italic">
+                    "{deletingResponseTarget.text}"
+                  </p>
+
+                  <p className="text-[11px] font-semibold text-rose-600">
+                    This will permanently delete this response from the database and User views.
+                  </p>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => setDeletingResponseTarget(null)}
+                      className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmDeleteResponse}
+                      className="w-1/2 py-3 rounded-full bg-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-rose-600 transition-all"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: Phase 29 Just For You Manager 💌 */}
         {activeTab === 'justforyou' && (
           <div className="space-y-6">
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex items-center justify-between">
@@ -347,7 +550,7 @@ export function AdminDashboard({ onExit }) {
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
               {dailyMsgsList.length === 0 ? (
                 <div className="py-12 text-center text-pink-600 font-semibold text-sm">
-                  No daily messages created yet. Click "Add Daily Message 💌" to create your first one!
+                  No daily messages created yet.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -387,79 +590,6 @@ export function AdminDashboard({ onExit }) {
                 </div>
               )}
             </div>
-
-            {/* Daily Message Form Modal */}
-            {isDailyMsgFormOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-lg w-full bg-white text-left border-2 border-pink-300 shadow-2xl space-y-4">
-                  <h3 className="font-heading font-bold text-xl text-pink-950">
-                    {editingDailyMsgId ? 'Edit Daily Message 💌' : 'Add Daily Message 💌'}
-                  </h3>
-
-                  <form onSubmit={handleSaveDailyMsgSubmit} className="space-y-4">
-                    <div>
-                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Title *</label>
-                      <input
-                        type="text"
-                        value={msgTitle}
-                        onChange={(e) => setMsgTitle(e.target.value)}
-                        placeholder="Title..."
-                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Message *</label>
-                      <textarea
-                        rows={3}
-                        value={msgMessage}
-                        onChange={(e) => setMsgMessage(e.target.value)}
-                        placeholder="Message text..."
-                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Category</label>
-                      <select
-                        value={msgCategory}
-                        onChange={(e) => setMsgCategory(e.target.value)}
-                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
-                      >
-                        <option value="General">General</option>
-                        <option value="Morning">Morning</option>
-                        <option value="Afternoon">Afternoon</option>
-                        <option value="Evening">Evening</option>
-                        <option value="Night">Night</option>
-                        <option value="Happy">Happy</option>
-                        <option value="Peaceful">Peaceful</option>
-                        <option value="Okay">Okay</option>
-                        <option value="Low">Low</option>
-                        <option value="Tired">Tired</option>
-                      </select>
-                    </div>
-
-                    {msgFormMsg && <p className="text-xs font-bold text-pink-700">{msgFormMsg}</p>}
-
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsDailyMsgFormOpen(false)}
-                        className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
-                      >
-                        Save Message 💌
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
