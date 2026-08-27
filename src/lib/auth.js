@@ -1,7 +1,7 @@
 /**
  * Strictly Decoupled Authentication Architecture
  * Admin Auth: In-memory only (Resets on Refresh F5)
- * User Auth: Isolated amrita_user_token session
+ * User Auth: Persistent User Session (localStorage + sessionStorage)
  * Role System: Admin PIN (sangam9534) vs Normal User role ('user')
  */
 
@@ -44,10 +44,10 @@ export function logoutAdmin() {
 }
 
 /* ===================================================
-   2. USER AUTHENTICATION & SESSION
+   2. USER AUTHENTICATION & SESSION PERSISTENCE
    =================================================== */
 
-export async function loginUser({ userId, password, rememberMe = false }) {
+export async function loginUser({ userId, password, rememberMe = true }) {
   if (!userId || !password) {
     throw new Error('User ID ya password incorrect hai. ❤️');
   }
@@ -88,13 +88,26 @@ export async function loginUser({ userId, password, rememberMe = false }) {
     authenticatedAt: new Date().toISOString(),
   };
 
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem('amrita_user_token', JSON.stringify(userObj));
+  // Always persist user token to BOTH localStorage & sessionStorage to guarantee login retention across F5 refresh & tab reopens
+  localStorage.setItem('amrita_user_token', JSON.stringify(userObj));
+  sessionStorage.setItem('amrita_user_token', JSON.stringify(userObj));
+
+  // Also sync with Supabase Auth session if environment variables are present
+  if (supabase && supabase.auth) {
+    try {
+      await supabase.auth.setSession({
+        access_token: userObj.token,
+        refresh_token: userObj.token,
+      });
+    } catch (e) {
+      // Ignore fallback Supabase mock token error
+    }
+  }
 
   // Record last login time
   adminRecordLastLogin(cleanUserId);
 
-  // Phase 33 Activity Log: User Login
+  // Activity Log: User Login
   saveUserActivity({
     event_type: 'login',
     title: '🔐 User Logged In',
@@ -110,7 +123,7 @@ export async function loginUser({ userId, password, rememberMe = false }) {
 }
 
 export function isUserAuthenticated() {
-  const sess = sessionStorage.getItem('amrita_user_token') || localStorage.getItem('amrita_user_token');
+  const sess = localStorage.getItem('amrita_user_token') || sessionStorage.getItem('amrita_user_token');
   if (!sess) return false;
   try {
     const parsed = JSON.parse(sess);
@@ -128,7 +141,7 @@ export function isUserAuthenticated() {
 
 export function getCurrentUser() {
   if (!isUserAuthenticated()) return null;
-  const sess = sessionStorage.getItem('amrita_user_token') || localStorage.getItem('amrita_user_token');
+  const sess = localStorage.getItem('amrita_user_token') || sessionStorage.getItem('amrita_user_token');
   try {
     return JSON.parse(sess);
   } catch (e) {
@@ -136,7 +149,41 @@ export function getCurrentUser() {
   }
 }
 
-export function logoutUser() {
+export async function restoreUserSession() {
+  // Check Supabase session first
+  if (supabase && supabase.auth) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) {
+        const uId = data.session.user.user_metadata?.username || 'amritayadav';
+        const userObj = {
+          role: 'user',
+          id: data.session.user.id,
+          userId: uId,
+          displayName: data.session.user.user_metadata?.display_name || uId,
+          email: data.session.user.email,
+          token: data.session.access_token || `user_token_${Date.now()}`,
+          authenticatedAt: new Date().toISOString(),
+        };
+        localStorage.setItem('amrita_user_token', JSON.stringify(userObj));
+        sessionStorage.setItem('amrita_user_token', JSON.stringify(userObj));
+        return userObj;
+      }
+    } catch (e) {
+      console.warn('[Auth] Supabase session fetch warning:', e);
+    }
+  }
+
+  // Fallback to robust local storage session
+  const currentUser = getCurrentUser();
+  if (currentUser) {
+    localStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
+    sessionStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
+  }
+  return currentUser;
+}
+
+export async function logoutUser() {
   const usr = getCurrentUser();
   if (usr) {
     saveUserActivity({
@@ -148,10 +195,20 @@ export function logoutUser() {
     });
   }
 
-  sessionStorage.removeItem('amrita_user_token');
+  if (supabase && supabase.auth) {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Ignore fallback signOut
+    }
+  }
+
   localStorage.removeItem('amrita_user_token');
+  sessionStorage.removeItem('amrita_user_token');
   sessionStorage.removeItem('amrita_user_session');
   localStorage.removeItem('amrita_user_session');
+  localStorage.removeItem('amrita_heart_checkin_completed');
+  sessionStorage.removeItem('amrita_heart_checkin_completed');
 }
 
 /* ===================================================
