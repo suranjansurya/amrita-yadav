@@ -2,9 +2,11 @@
  * Strictly Decoupled Authentication Architecture
  * Admin Auth: In-memory only (Resets on Refresh F5)
  * User Auth: Isolated amrita_user_token session
+ * Role System: Admin PIN (sangam9534) vs Normal User role ('user')
  */
 
-// Generate SHA-256 hash string for password checks
+import { supabase } from './supabase';
+
 async function hashPin(pin) {
   const encoder = new TextEncoder();
   const data = encoder.encode(pin);
@@ -13,17 +15,11 @@ async function hashPin(pin) {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Expected admin hash for fallback (sangam9534)
 const DEFAULT_ADMIN_HASH = '1509eed4e626ad47a1887e0cc956a9f92b9e7bbae18418e80f47db19e1fd9425';
-
-// Expected user credentials: amritayadav & @amritay123
-const AUTHORIZED_USER_ID = 'amritayadav';
 const DEFAULT_USER_PASS_HASH = '6e7368bb9914b14d8bd7bc1a1f0a200fdfc972edc4501a3577d33d995aa42d48';
 
 /* ===================================================
    1. ADMIN AUTHENTICATION (IN-MEMORY ONLY)
-   DOES NOT PERSIST ACROSS REFRESH
-   DOES NOT TOUCH USER AUTH
    =================================================== */
 
 export async function authenticateAdmin(credentialInput) {
@@ -39,21 +35,16 @@ export async function authenticateAdmin(credentialInput) {
     isMatch = inputHash === envHash;
   }
 
-  // Purely returns verification result. Zero storage persistence!
   return isMatch;
 }
 
 export function logoutAdmin() {
-  // Purely clean up in-memory references. Does NOT log out User!
   sessionStorage.removeItem('amrita_admin_token');
   localStorage.removeItem('amrita_admin_token');
 }
 
 /* ===================================================
-   2. USER AUTHENTICATION (ISOLATED ROLE)
-   Storage Key: amrita_user_token
-   Authorized User ID: amritayadav
-   Password: @amritay123
+   2. USER AUTHENTICATION & SESSION
    =================================================== */
 
 export async function loginUser({ userId, password, rememberMe = false }) {
@@ -62,21 +53,25 @@ export async function loginUser({ userId, password, rememberMe = false }) {
   }
 
   const cleanUserId = userId.trim().toLowerCase();
+  const allUsers = fetchManagedUsers();
+  const foundUser = allUsers.find((u) => u.userId.toLowerCase() === cleanUserId);
 
-  // STRICT AUTHORIZATION CHECK: User ID MUST be "amritayadav"
-  if (cleanUserId !== AUTHORIZED_USER_ID) {
+  if (!foundUser) {
     throw new Error('User ID ya password incorrect hai. ❤️');
+  }
+
+  if (foundUser.status === 'disabled') {
+    throw new Error('This user account has been disabled. Please contact admin. 🔒');
   }
 
   const inputPassHash = await hashPin(password.trim());
   let isPasswordValid = false;
 
-  if (import.meta.env.VITE_USER_PASSWORD) {
-    const envUserHash = await hashPin(import.meta.env.VITE_USER_PASSWORD.trim());
-    isPasswordValid = inputPassHash === envUserHash;
+  if (cleanUserId === 'amritayadav' && (!foundUser.passwordHash || foundUser.passwordHash === DEFAULT_USER_PASS_HASH)) {
+    const defaultTargetHash = await hashPin('@amritay123');
+    isPasswordValid = inputPassHash === defaultTargetHash || inputPassHash === DEFAULT_USER_PASS_HASH;
   } else {
-    const targetHash = await hashPin('@amritay123');
-    isPasswordValid = inputPassHash === targetHash || inputPassHash === DEFAULT_USER_PASS_HASH;
+    isPasswordValid = inputPassHash === foundUser.passwordHash;
   }
 
   if (!isPasswordValid) {
@@ -84,17 +79,21 @@ export async function loginUser({ userId, password, rememberMe = false }) {
   }
 
   const userObj = {
-    role: 'user',
-    id: 'usr-amritayadav',
-    userId: AUTHORIZED_USER_ID,
-    displayName: 'Amrita Yadav',
-    email: `${AUTHORIZED_USER_ID}@amritayadav.internal`,
+    role: 'user', // STRICTLY USER ROLE ONLY
+    id: foundUser.id || `usr-${cleanUserId}`,
+    userId: foundUser.userId,
+    displayName: foundUser.displayName || foundUser.userId,
+    email: `${cleanUserId}@amritayadav.internal`,
     token: `user_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     authenticatedAt: new Date().toISOString(),
   };
 
   const storage = rememberMe ? localStorage : sessionStorage;
   storage.setItem('amrita_user_token', JSON.stringify(userObj));
+
+  // Record last login time
+  adminRecordLastLogin(cleanUserId);
+
   return userObj;
 }
 
@@ -106,7 +105,7 @@ export function isUserAuthenticated() {
     return Boolean(
       parsed &&
       parsed.role === 'user' &&
-      parsed.userId === AUTHORIZED_USER_ID &&
+      parsed.userId &&
       parsed.token &&
       parsed.token.startsWith('user_token_')
     );
@@ -126,7 +125,6 @@ export function getCurrentUser() {
 }
 
 export function logoutUser() {
-  // Purge ONLY User session storage. Does NOT touch Admin!
   sessionStorage.removeItem('amrita_user_token');
   localStorage.removeItem('amrita_user_token');
   sessionStorage.removeItem('amrita_user_session');
@@ -134,52 +132,105 @@ export function logoutUser() {
 }
 
 /* ===================================================
-   3. ADMIN USER MANAGEMENT HELPERS
+   3. PHASE 31: ADMIN USER ACCOUNT MANAGER
    =================================================== */
 
-export async function adminCreateUser({ userId, displayName, password }) {
-  if (!userId || !password) {
-    throw new Error('User ID and password are required');
+export function fetchManagedUsers() {
+  const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
+  const defaultUser = {
+    id: 'usr-amritayadav',
+    userId: 'amritayadav',
+    displayName: 'Amrita Yadav',
+    role: 'user',
+    status: 'active',
+    created_at: '2026-08-25T10:00:00.000Z',
+    last_login: new Date().toISOString(),
+  };
+
+  const hasDefault = localUsers.some((u) => u.userId.toLowerCase() === 'amritayadav');
+  if (!hasDefault) {
+    return [defaultUser, ...localUsers];
+  }
+  return localUsers;
+}
+
+export async function adminCreateUser({ username, displayName, password }) {
+  if (!username || !username.trim()) {
+    throw new Error('Username is required.');
   }
 
-  const cleanUserId = userId.trim().toLowerCase();
+  const cleanUsername = username.trim().toLowerCase();
+
+  if (cleanUsername.length < 3) {
+    throw new Error('Username must be at least 3 characters.');
+  }
+
+  if (!password || password.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+
+  const existingUsers = fetchManagedUsers();
+  if (existingUsers.some((u) => u.userId.toLowerCase() === cleanUsername)) {
+    throw new Error('Username already exists.');
+  }
+
   const passwordHash = await hashPin(password);
   const newUser = {
     id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    userId: cleanUserId,
-    displayName: displayName || cleanUserId,
+    userId: cleanUsername,
+    displayName: displayName?.trim() || cleanUsername,
     passwordHash,
+    role: 'user', // FORCE ROLE = USER (NEVER ADMIN)
     status: 'active',
     created_at: new Date().toISOString(),
+    last_login: null,
   };
 
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
   const updated = [newUser, ...localUsers];
   localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
 
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('profiles').upsert([
+        {
+          id: newUser.id,
+          username: newUser.userId,
+          display_name: newUser.displayName,
+          role: 'user',
+          is_active: true,
+          created_at: newUser.created_at,
+        },
+      ]);
+    } catch (e) {
+      console.warn('[Supabase] Profile creation sync error:', e);
+    }
+  }
+
   return newUser;
 }
 
-export function fetchManagedUsers() {
+export async function adminEditUser({ userId, displayName, status }) {
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
-  const defaultUser = {
-    id: 'usr-amritayadav',
-    userId: AUTHORIZED_USER_ID,
-    displayName: 'Amrita Yadav',
-    status: 'active',
-    created_at: new Date().toISOString(),
-  };
+  const updated = localUsers.map((u) => {
+    if (u.userId.toLowerCase() === userId.toLowerCase()) {
+      return {
+        ...u,
+        displayName: displayName || u.displayName,
+        status: status || u.status,
+      };
+    }
+    return u;
+  });
 
-  if (!localUsers.some((u) => u.userId === AUTHORIZED_USER_ID)) {
-    return [defaultUser, ...localUsers];
-  }
-  return localUsers;
+  localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+  return true;
 }
 
 export async function adminToggleUserStatus(userId) {
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
   const updated = localUsers.map((u) => {
-    if (u.userId === userId) {
+    if (u.userId.toLowerCase() === userId.toLowerCase()) {
       return { ...u, status: u.status === 'disabled' ? 'active' : 'disabled' };
     }
     return u;
@@ -187,12 +238,45 @@ export async function adminToggleUserStatus(userId) {
   localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
 }
 
-export async function adminResetUserPassword(userId, newPassword) {
+export async function adminChangeUserPassword(userId, newPassword) {
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
+  }
+
   const passwordHash = await hashPin(newPassword);
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
   const updated = localUsers.map((u) => {
-    if (u.userId === userId) {
+    if (u.userId.toLowerCase() === userId.toLowerCase()) {
       return { ...u, passwordHash };
+    }
+    return u;
+  });
+  localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+}
+
+export async function adminDeleteUser(userId) {
+  if (userId.toLowerCase() === 'amritayadav') {
+    throw new Error('Primary owner account (amritayadav) cannot be deleted.');
+  }
+
+  const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
+  const updated = localUsers.filter((u) => u.userId.toLowerCase() !== userId.toLowerCase());
+  localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('profiles').delete().eq('username', userId);
+    } catch (e) {
+      console.warn('[Supabase] Profile delete sync error:', e);
+    }
+  }
+}
+
+function adminRecordLastLogin(userId) {
+  const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
+  const updated = localUsers.map((u) => {
+    if (u.userId.toLowerCase() === userId.toLowerCase()) {
+      return { ...u, last_login: new Date().toISOString() };
     }
     return u;
   });
