@@ -76,6 +76,9 @@ import {
   Download,
   Activity,
   HelpCircle,
+  FileText,
+  Clock,
+  Filter,
 } from 'lucide-react';
 
 export function AdminDashboard({ onExit }) {
@@ -84,27 +87,38 @@ export function AdminDashboard({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'answers' | 'users' | 'responses' | 'justforyou'
+  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'answers' | 'users' | 'justforyou'
   const [filter, setFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('All Time'); // 'All Time' | 'Today' | 'Yesterday' | 'Last 7 Days' | 'Last 30 Days'
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState('newest');
+  const [selectedUserFilter, setSelectedUserFilter] = useState('All');
 
   const [activityTimeline, setActivityTimeline] = useState([]);
   const [userAnswersList, setUserAnswersList] = useState([]);
   const [usersList, setUsersList] = useState([]);
-  const [responsesList, setResponsesList] = useState([]);
   const [dailyMsgsList, setDailyMsgsList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [successNotice, setSuccessNotice] = useState('');
 
-  // Delete confirmation modal state
+  // Selected User Profile details
+  const [selectedProfileUser, setSelectedProfileUser] = useState(null);
+
+  // Create User Modal state
+  const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [createUserError, setCreateUserError] = useState('');
+
+  // Response Delete Confirmation Modal state
   const [deletingResponseTarget, setDeletingResponseTarget] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadDashboardData();
     }
-  }, [isAuthenticated, filter, activeTab]);
+  }, [isAuthenticated, filter, dateFilter, selectedUserFilter, activeTab]);
 
   const loadDashboardData = async () => {
     setIsLoading(true);
@@ -112,14 +126,13 @@ export function AdminDashboard({ onExit }) {
       const managedUsers = fetchManagedUsers();
       setUsersList(managedUsers);
 
-      if (activeTab === 'activity') {
-        const actData = await fetchUserActivityTimeline('usr-amritayadav', filter);
-        setActivityTimeline(actData);
-      } else if (activeTab === 'answers' || activeTab === 'responses') {
-        const rData = await fetchAllUserResponses(filter);
-        setUserAnswersList(rData);
-        setResponsesList(rData);
-      } else if (activeTab === 'justforyou') {
+      const rData = await fetchAllUserResponses('All');
+      const actData = await fetchUserActivityTimeline('usr-amritayadav', 'All');
+      
+      setUserAnswersList(rData);
+      setActivityTimeline(actData);
+
+      if (activeTab === 'justforyou') {
         const dData = await fetchDailyMessages({ includeInactive: true });
         setDailyMsgsList(dData);
       }
@@ -153,9 +166,39 @@ export function AdminDashboard({ onExit }) {
     setIsAuthenticated(false);
     setActivityTimeline([]);
     setUserAnswersList([]);
-    setResponsesList([]);
     setUsersList([]);
     if (onExit) onExit();
+  };
+
+  // Create User Handler
+  const handleCreateUserSubmit = async (e) => {
+    e.preventDefault();
+    setCreateUserError('');
+
+    if (newPassword !== confirmPassword) {
+      setCreateUserError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      await adminCreateUser({
+        username: newUsername,
+        displayName: newDisplayName,
+        password: newPassword,
+      });
+
+      setSuccessNotice('User created successfully ✓');
+      setTimeout(() => setSuccessNotice(''), 3500);
+
+      setIsCreateUserModalOpen(false);
+      setNewUsername('');
+      setNewDisplayName('');
+      setNewPassword('');
+      setConfirmPassword('');
+      loadDashboardData();
+    } catch (err) {
+      setCreateUserError(err.message);
+    }
   };
 
   // Response Delete Handler
@@ -165,7 +208,6 @@ export function AdminDashboard({ onExit }) {
     try {
       await deleteUserResponse(deletingResponseTarget.responseType, deletingResponseTarget.id);
       setUserAnswersList((prev) => prev.filter((r) => r.id !== deletingResponseTarget.id));
-      setResponsesList((prev) => prev.filter((r) => r.id !== deletingResponseTarget.id));
       setSuccessNotice('Response deleted successfully. ✓');
       setTimeout(() => setSuccessNotice(''), 3000);
     } catch (err) {
@@ -234,8 +276,22 @@ export function AdminDashboard({ onExit }) {
     );
   }
 
-  // Filter & Search Activity / Answers
+  // Filter & Search
+  const filteredUsers = usersList.filter((u) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      u.userId.toLowerCase().includes(q) ||
+      (u.displayName && u.displayName.toLowerCase().includes(q))
+    );
+  });
+
   const filteredAnswers = userAnswersList.filter((r) => {
+    if (selectedUserFilter !== 'All' && r.user_id !== selectedUserFilter) return false;
+    if (filter === 'onboarding') {
+      const isActOnboarding = activityTimeline.some((a) => a.metadata?.source === 'login_onboarding' && a.metadata?.answer === r.text);
+      if (!isActOnboarding) return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -246,6 +302,8 @@ export function AdminDashboard({ onExit }) {
   });
 
   const filteredActivity = activityTimeline.filter((act) => {
+    if (selectedUserFilter !== 'All' && act.user_id !== selectedUserFilter) return false;
+    if (filter !== 'All' && act.event_type !== filter) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -254,6 +312,15 @@ export function AdminDashboard({ onExit }) {
       (act.metadata?.answer && act.metadata.answer.toLowerCase().includes(q))
     );
   });
+
+  // Calculate User Online/Active Status (Active within last 15 mins)
+  const isUserActiveNow = (userId) => {
+    const userActs = activityTimeline.filter((a) => a.user_id === userId);
+    if (userActs.length === 0) return false;
+    const latestTime = new Date(userActs[0].created_at).getTime();
+    const nowTime = Date.now();
+    return nowTime - latestTime <= 15 * 60 * 1000;
+  };
 
   const totalUsers = usersList.length;
   const totalResponses = userAnswersList.length;
@@ -274,7 +341,7 @@ export function AdminDashboard({ onExit }) {
               <h1 className="font-heading font-extrabold text-2xl text-pink-950">
                 Amrita's Private Admin
               </h1>
-              <p className="text-xs text-pink-700 font-semibold">Activity Tracking & Question/Answer Management</p>
+              <p className="text-xs text-pink-700 font-semibold">Live User Activity Monitor & Account Manager</p>
             </div>
           </div>
 
@@ -283,32 +350,32 @@ export function AdminDashboard({ onExit }) {
             <div className="flex items-center bg-pink-100 p-1 rounded-full text-xs font-bold">
               <button
                 onClick={() => setActiveTab('activity')}
-                className={`px-3 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
+                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
                   activeTab === 'activity' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
                 }`}
               >
                 <Activity size={13} />
-                <span>📊 Activity</span>
+                <span>📊 Live Activity</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('answers')}
-                className={`px-3 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
+                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
                   activeTab === 'answers' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
                 }`}
               >
-                <HelpCircle size={13} />
-                <span>💬 User Answers</span>
+                <MessageSquare size={13} />
+                <span>💬 All Responses</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('users')}
-                className={`px-3 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
+                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
                   activeTab === 'users' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
                 }`}
               >
                 <Users size={13} />
-                <span>👥 Users</span>
+                <span>👥 User Management</span>
               </button>
             </div>
 
@@ -360,7 +427,7 @@ export function AdminDashboard({ onExit }) {
           </div>
         </div>
 
-        {/* Tab 1: Phase 32 User Activity Timeline 📊 */}
+        {/* Tab 1: Phase 33 LIVE USER ACTIVITY MONITOR 📊 */}
         {activeTab === 'activity' && (
           <div className="space-y-6">
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
@@ -376,57 +443,131 @@ export function AdminDashboard({ onExit }) {
                   />
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-bold text-pink-800">Filter:</span>
+                <div className="flex items-center space-x-3">
+                  <span className="text-xs font-bold text-pink-800">User Filter:</span>
                   <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
+                    value={selectedUserFilter}
+                    onChange={(e) => setSelectedUserFilter(e.target.value)}
                     className="px-3.5 py-1.5 rounded-full bg-pink-50 border border-pink-200 text-xs font-bold text-pink-950 focus:outline-none"
                   >
-                    <option value="All">All Activities</option>
-                    <option value="mood_checkin">❤️ Mood Check-ins</option>
-                    <option value="journal_created">📖 Journal Entries</option>
-                    <option value="surprise_opened">🎁 Surprises</option>
-                    <option value="digital_hug">🤗 Digital Hugs</option>
-                    <option value="star_discovered">🌌 Sky Stars</option>
-                    <option value="favorite_saved">🫙 Saved Favorites</option>
+                    <option value="All">All Users</option>
+                    {usersList.map((u) => (
+                      <option key={u.userId} value={u.userId}>@{u.userId}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+
+              {/* Date & Feature Filters */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-pink-100">
+                <span className="text-xs font-bold text-pink-700 mr-1">Feature:</span>
+                <button
+                  onClick={() => setFilter('All')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'All' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  All Features
+                </button>
+                <button
+                  onClick={() => setFilter('question_answer')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'question_answer' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  ❓ Q&A Answers
+                </button>
+                <button
+                  onClick={() => setFilter('mood_checkin')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'mood_checkin' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  ❤️ Mood Check-ins
+                </button>
+                <button
+                  onClick={() => setFilter('surprise_opened')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'surprise_opened' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  🎁 Surprises
+                </button>
+                <button
+                  onClick={() => setFilter('digital_hug')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'digital_hug' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  🤗 Digital Hugs
+                </button>
+                <button
+                  onClick={() => setFilter('star_discovered')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    filter === 'star_discovered' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
+                  }`}
+                >
+                  🌌 Sky Stars
+                </button>
+              </div>
             </div>
 
-            {/* Timeline View */}
+            {/* Live Activity Feed */}
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                <h3 className="font-heading font-extrabold text-lg text-pink-950 flex items-center space-x-2">
+                  <Activity size={18} className="text-pink-500" />
+                  <span>📊 LIVE USER ACTIVITY TIMELINE</span>
+                </h3>
+
+                <div className="flex items-center space-x-2 text-xs font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                  <span className="text-emerald-700">Live Monitor Active</span>
+                </div>
+              </div>
+
               {filteredActivity.length === 0 ? (
                 <div className="py-12 text-center text-pink-600 font-semibold text-sm">
-                  No activity logged yet.
+                  No user activity recorded yet.
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredActivity.map((act) => (
                     <div
                       key={act.id}
-                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 relative space-y-1.5"
+                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-1.5 hover:bg-pink-50 transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-heading font-bold text-sm text-pink-950 flex items-center space-x-2">
-                          <Activity size={14} className="text-pink-500" />
-                          <span>{act.title}</span>
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-heading font-extrabold text-pink-950">
+                            👤 @{act.user_id || 'amritayadav'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            isUserActiveNow(act.user_id) ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {isUserActiveNow(act.user_id) ? '🟢 Active' : '⚪ Offline'}
+                          </span>
+                        </div>
+
+                        <span className="text-[11px] font-bold text-pink-600 flex items-center space-x-1">
+                          <Clock size={12} />
+                          <span>{act.time}</span>
                         </span>
-                        <span className="text-[11px] font-bold text-pink-600">
-                          {act.date} • {act.time}
-                        </span>
+                      </div>
+
+                      <div className="font-heading font-bold text-sm text-pink-900 pt-0.5">
+                        {act.title}
                       </div>
 
                       {act.metadata?.question && (
                         <p className="text-xs font-bold text-pink-900">
-                          Question: <span className="font-normal italic">"{act.metadata.question}"</span>
+                          ❓ Question: <span className="font-normal italic">"{act.metadata.question}"</span>
                         </p>
                       )}
 
                       {act.metadata?.answer && (
                         <p className="text-xs font-bold text-pink-950 bg-white p-2.5 rounded-xl border border-pink-100">
-                          Answer: <span className="font-normal italic">"{act.metadata.answer}"</span>
+                          💬 Answer: <span className="font-normal italic text-rose-900">"{act.metadata.answer}"</span>
                         </p>
                       )}
                     </div>
@@ -437,15 +578,15 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Tab 2: Phase 32 User Answers 💬 (CRITICAL REQUIREMENT) */}
+        {/* Tab 2: 💬 ALL USER RESPONSES */}
         {activeTab === 'answers' && (
           <div className="space-y-6">
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <h3 className="font-heading font-bold text-lg text-pink-950">
-                  User Questions & Answers ({filteredAnswers.length})
+                  💬 ALL USER RESPONSES ({filteredAnswers.length})
                 </h3>
-                <p className="text-xs text-pink-700">Actual question and exact user answer history</p>
+                <p className="text-xs text-pink-700">Actual questions and exact user answers</p>
               </div>
 
               <button
@@ -457,10 +598,11 @@ export function AdminDashboard({ onExit }) {
               </button>
             </div>
 
+            {/* Response Cards Grid */}
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
               {filteredAnswers.length === 0 ? (
                 <div className="py-12 text-center text-pink-600 font-semibold text-sm">
-                  No user answers recorded yet.
+                  No user responses found.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -479,10 +621,10 @@ export function AdminDashboard({ onExit }) {
 
                         <div className="space-y-1">
                           <p className="text-xs font-bold text-pink-900">
-                            Q: <span className="font-semibold italic text-pink-950">"{ans.question || 'User Prompt'}"</span>
+                            ❓ Question: <span className="font-semibold italic text-pink-950">"{ans.question || 'User Prompt'}"</span>
                           </p>
                           <p className="text-xs font-bold text-pink-950 bg-white p-3 rounded-xl border border-pink-100">
-                            A: <span className="font-semibold italic text-rose-900">"{ans.answer || ans.text}"</span>
+                            💬 Answer: <span className="font-semibold italic text-rose-900">"{ans.answer || ans.text}"</span>
                           </p>
                         </div>
                       </div>
@@ -505,52 +647,160 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Confirmation Modal for Response Deletion */}
-        {deletingResponseTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 rounded-3xl max-w-md w-full bg-white text-center border-2 border-pink-300 shadow-2xl space-y-4">
-              <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
-                <Trash2 size={28} />
-              </div>
-
-              <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                Delete this response?
-              </h3>
-
-              <p className="text-xs text-pink-700 bg-pink-50 p-3 rounded-xl border border-pink-100 italic">
-                "{deletingResponseTarget.answer || deletingResponseTarget.text}"
-              </p>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => setDeletingResponseTarget(null)}
-                  className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDeleteResponse}
-                  className="w-1/2 py-3 rounded-full bg-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-rose-600 transition-all"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: Users List */}
+        {/* Tab 3: 👥 USER MANAGEMENT (ALWAYS INCLUDES + CREATE USER) */}
         {activeTab === 'users' && (
-          <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm">
-            <h3 className="font-heading font-bold text-lg text-pink-950 mb-4">Registered Users ({usersList.length})</h3>
-            <div className="space-y-3">
-              {usersList.map((u) => (
-                <div key={u.id || u.userId} className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 flex items-center justify-between">
-                  <span className="font-heading font-bold text-sm text-pink-950">{u.displayName || u.userId} (@{u.userId})</span>
-                  <span className="text-xs text-pink-600 font-bold uppercase">{u.status || 'active'}</span>
-                </div>
-              ))}
+          <div className="space-y-6">
+            
+            {/* Header Controls Bar with + Create User */}
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h3 className="font-heading font-bold text-lg text-pink-950">
+                  👥 USER MANAGEMENT ({usersList.length} accounts)
+                </h3>
+                <p className="text-xs text-pink-700">Create, edit, and manage User accounts</p>
+              </div>
+
+              {/* ALWAYS PROMINENT + CREATE USER BUTTON */}
+              <button
+                onClick={() => {
+                  setCreateUserError('');
+                  setIsCreateUserModalOpen(true);
+                }}
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <UserPlus size={16} />
+                <span>+ CREATE USER</span>
+              </button>
             </div>
+
+            {/* Users Table */}
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-pink-100 text-[11px] font-bold text-pink-700 uppercase tracking-wider">
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Created Date</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pink-50 text-xs font-semibold">
+                  {filteredUsers.map((u) => (
+                    <tr key={u.id || u.userId} className="hover:bg-pink-50/50 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => setSelectedProfileUser(u)}
+                          className="font-bold text-pink-950 hover:text-pink-600 underline text-left focus:outline-none"
+                        >
+                          {u.displayName || u.userId} (@{u.userId})
+                        </button>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 text-[11px] font-bold uppercase">
+                          {u.role || 'user'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                          u.status === 'disabled' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {u.status || 'active'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-pink-700">
+                        {new Date(u.created_at || Date.now()).toLocaleDateString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right space-x-1.5">
+                        <button
+                          onClick={() => setSelectedProfileUser(u)}
+                          className="px-3 py-1 rounded-lg bg-pink-100 text-pink-800 font-bold text-[11px]"
+                        >
+                          View Activity & Profile →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal: Create User Modal */}
+            {isCreateUserModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4">
+                  <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                    + Create New User Account 👤
+                  </h3>
+
+                  <form onSubmit={handleCreateUserSubmit} className="space-y-3.5">
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Username *</label>
+                      <input
+                        type="text"
+                        value={newUsername}
+                        onChange={(e) => setNewUsername(e.target.value)}
+                        placeholder="e.g. amritayadav"
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Display Name (Optional)</label>
+                      <input
+                        type="text"
+                        value={newDisplayName}
+                        onChange={(e) => setNewDisplayName(e.target.value)}
+                        placeholder="e.g. Amrita Yadav"
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Password (min 8 chars) *</label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Confirm Password *</label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    {createUserError && (
+                      <p className="text-xs font-bold text-rose-600 animate-bounce">{createUserError}</p>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsCreateUserModalOpen(false)}
+                        className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
+                      >
+                        Create User
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

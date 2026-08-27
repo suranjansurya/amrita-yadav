@@ -5,7 +5,7 @@
  * Role System: Admin PIN (sangam9534) vs Normal User role ('user')
  */
 
-import { supabase } from './supabase';
+import { supabase, saveUserActivity } from './supabase';
 
 async function hashPin(pin) {
   const encoder = new TextEncoder();
@@ -94,6 +94,18 @@ export async function loginUser({ userId, password, rememberMe = false }) {
   // Record last login time
   adminRecordLastLogin(cleanUserId);
 
+  // Phase 33 Activity Log: User Login
+  saveUserActivity({
+    event_type: 'login',
+    title: '🔐 User Logged In',
+    description: `User @${foundUser.userId} logged in`,
+    metadata: {
+      action: 'login',
+      username: foundUser.userId,
+    },
+    user_id: foundUser.id || `usr-${cleanUserId}`,
+  });
+
   return userObj;
 }
 
@@ -125,6 +137,17 @@ export function getCurrentUser() {
 }
 
 export function logoutUser() {
+  const usr = getCurrentUser();
+  if (usr) {
+    saveUserActivity({
+      event_type: 'logout',
+      title: '🔒 User Logged Out',
+      description: `User @${usr.userId} logged out`,
+      metadata: { action: 'logout', username: usr.userId },
+      user_id: usr.id || `usr-${usr.userId}`,
+    });
+  }
+
   sessionStorage.removeItem('amrita_user_token');
   localStorage.removeItem('amrita_user_token');
   sessionStorage.removeItem('amrita_user_session');
@@ -132,7 +155,7 @@ export function logoutUser() {
 }
 
 /* ===================================================
-   3. PHASE 31: ADMIN USER ACCOUNT MANAGER
+   3. PHASE 31 & 33: ADMIN USER ACCOUNT MANAGER
    =================================================== */
 
 export function fetchManagedUsers() {

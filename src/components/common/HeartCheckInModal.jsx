@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTimeBasedGreeting } from '../../hooks/useTimeBasedGreeting';
-import { saveOrUpdateHeartCheckIn } from '../../lib/supabase';
+import { saveOrUpdateHeartCheckIn, saveUserActivity } from '../../lib/supabase';
 import { Heart, Sparkles, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -68,15 +68,41 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
 
   const handleSubmitCheckIn = async () => {
     setIsSubmitting(true);
+    const uId = currentUser?.userId || 'usr-amritayadav';
+
     try {
+      // Save Consolidated Heart Check-in Record
       await saveOrUpdateHeartCheckIn({
-        user_id: currentUser?.userId || 'usr-amritayadav',
+        user_id: uId,
         mood: selectedMood,
         day_feeling: selectedDay,
         current_need: selectedNeed,
         heart_word: heartWord,
         shared_message: sharedMessage,
       });
+
+      // Explicitly Save ALL 5 Login/Onboarding Questions individually for Admin Response Center
+      const questionsList = [
+        { q: 'How are you feeling today?', a: selectedMood },
+        { q: 'How does your day feel so far?', a: selectedDay },
+        { q: 'What does your heart need right now?', a: selectedNeed },
+        { q: 'If you could pick one word for your heart today...', a: heartWord.trim() || 'Peace' },
+        { q: 'Anything you want to leave here before you enter?', a: sharedMessage.trim() || 'Just stepping into my world ❤️' },
+      ];
+
+      for (const item of questionsList) {
+        await saveUserActivity({
+          event_type: 'question_answer',
+          title: `💬 Onboarding Q: ${item.q}`,
+          description: `Q: ${item.q} | A: ${item.a}`,
+          metadata: {
+            question: item.q,
+            answer: item.a,
+            source: 'login_onboarding',
+          },
+          user_id: uId,
+        });
+      }
 
       confetti({
         particleCount: 60,
@@ -109,183 +135,184 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
         {showResponse ? (
           <div className="py-8 space-y-6 animate-scaleUp">
             <div className="w-16 h-16 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 size={36} className="text-pink-500" />
+              <Heart size={32} className="fill-pink-500 animate-pulse" />
             </div>
 
-            <div className="space-y-3">
-              <p className="font-heading font-extrabold text-2xl sm:text-3xl text-pink-950">
-                Thank you for telling me. ❤️
-              </p>
-              <p className="font-script text-2xl text-pink-700">
-                "{MOOD_RESPONSES[selectedMood] || 'Welcome to your little dream world. ✨'}"
+            <div className="space-y-2">
+              <h3 className="font-heading font-extrabold text-2xl text-pink-950">
+                Welcome back, {currentUser?.displayName || 'Amrita'} ❤️
+              </h3>
+              <p className="font-script text-2xl text-pink-800 leading-relaxed px-4">
+                "{MOOD_RESPONSES[selectedMood] || 'Your heart is safe here. Step inside... ✨'}"
               </p>
             </div>
 
-            <div className="pt-4 border-t border-pink-100 text-xs font-bold text-pink-500 uppercase tracking-widest animate-pulse">
-              Now come in... your little world is waiting for you. ✨
+            <div className="pt-2">
+              <span className="text-xs font-bold text-pink-700 animate-pulse block">
+                Entering your little world... ✨
+              </span>
             </div>
           </div>
         ) : (
-          /* Render 5-Step Question Flow */
+          /* Multi-Step Onboarding Questionnaire (Steps 1 to 5) */
           <div className="space-y-6">
             
-            {/* Header Greeting & Progress Indicator */}
-            <div className="flex items-center justify-between border-b border-pink-100 pb-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-pink-700 bg-pink-100/70 px-3 py-1 rounded-full">
-                {greetingText}
+            {/* Step Indicator */}
+            <div className="flex items-center justify-between text-xs font-bold text-pink-700 border-b border-pink-100 pb-3">
+              <span className="flex items-center space-x-1">
+                <Heart size={14} className="fill-pink-400 text-pink-400" />
+                <span>Heart Check-in</span>
               </span>
-
-              <div className="flex items-center space-x-1 text-xs font-bold text-pink-600">
-                <Heart size={14} className="fill-pink-400" />
-                <span>♡ {step} / 5</span>
-              </div>
+              <span>Step {step} of 5</span>
             </div>
 
-            {/* Step Content */}
-            <div className="min-h-[220px] flex flex-col justify-center">
-              
-              {/* Step 1: Mood */}
-              {step === 1 && (
-                <div className="space-y-4 animate-fadeIn">
-                  <h3 className="font-heading font-extrabold text-2xl text-pink-950">
-                    Aaj tum kaisi ho? ❤️
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-                    {MOOD_OPTIONS.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSelectedMood(opt)}
-                        className={`p-3.5 rounded-2xl border text-sm font-bold transition-all text-left flex items-center justify-between ${
-                          selectedMood === opt
-                            ? 'bg-pink-500 text-white border-pink-500 shadow-md scale-102'
-                            : 'bg-pink-50/60 border-pink-200 text-pink-950 hover:bg-pink-100/60'
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedMood === opt && <Heart size={14} className="fill-white" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 2: Day */}
-              {step === 2 && (
-                <div className="space-y-4 animate-fadeIn">
-                  <h3 className="font-heading font-extrabold text-2xl text-pink-950">
-                    Aaj ka din kaisa raha? ✨
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-                    {DAY_OPTIONS.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSelectedDay(opt)}
-                        className={`p-3.5 rounded-2xl border text-sm font-bold transition-all text-left flex items-center justify-between ${
-                          selectedDay === opt
-                            ? 'bg-pink-500 text-white border-pink-500 shadow-md scale-102'
-                            : 'bg-pink-50/60 border-pink-200 text-pink-950 hover:bg-pink-100/60'
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedDay === opt && <Heart size={14} className="fill-white" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Current Need */}
-              {step === 3 && (
-                <div className="space-y-4 animate-fadeIn">
-                  <h3 className="font-heading font-extrabold text-2xl text-pink-950">
-                    Abhi tumhe kya chahiye? 💕
-                  </h3>
-                  <div className="space-y-2 pt-2">
-                    {NEED_OPTIONS.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSelectedNeed(opt)}
-                        className={`w-full p-3.5 rounded-2xl border text-sm font-bold transition-all text-left flex items-center justify-between ${
-                          selectedNeed === opt
-                            ? 'bg-pink-500 text-white border-pink-500 shadow-md scale-102'
-                            : 'bg-pink-50/60 border-pink-200 text-pink-950 hover:bg-pink-100/60'
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedNeed === opt && <Heart size={14} className="fill-white" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4: Heart Word (Optional) */}
-              {step === 4 && (
-                <div className="space-y-4 animate-fadeIn">
-                  <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
-                    Ek word mein batao... abhi dil mein kya hai? ❤️
-                  </h3>
-                  <p className="text-xs text-pink-700 italic mb-2">(Optional)</p>
-                  <input
-                    type="text"
-                    value={heartWord}
-                    onChange={(e) => setHeartWord(e.target.value)}
-                    placeholder="Type what's in your heart..."
-                    className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-center text-base focus:outline-none focus:ring-2 focus:ring-pink-300"
-                  />
-                </div>
-              )}
-
-              {/* Step 5: Share Message (Optional) */}
-              {step === 5 && (
-                <div className="space-y-3 animate-fadeIn">
-                  <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
-                    Kya tum kuch share karna chahti ho? 💌
-                  </h3>
-                  <p className="text-xs text-pink-700 italic mb-1">(Optional)</p>
-                  <textarea
-                    rows={3}
-                    value={sharedMessage}
-                    onChange={(e) => setSharedMessage(e.target.value)}
-                    placeholder="Anything you want to tell me..."
-                    className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 resize-none"
-                  />
-                </div>
-              )}
-
-            </div>
-
-            {/* Validation Error Banner */}
-            {validationError && (
-              <p className="text-xs font-bold text-rose-600 animate-bounce">
-                {validationError}
+            {/* Welcome Banner Header */}
+            <div className="space-y-1">
+              <h2 className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
+                Welcome back, {currentUser?.displayName || 'Amrita'} ❤️
+              </h2>
+              <p className="text-xs text-pink-700 font-semibold">
+                Before you enter my little world... how is your heart today?
               </p>
+            </div>
+
+            {/* Step 1: Mood Question */}
+            {step === 1 && (
+              <div className="space-y-4 animate-fadeIn">
+                <h3 className="font-heading font-bold text-base text-pink-900">
+                  1. How are you feeling today?
+                </h3>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {MOOD_OPTIONS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setSelectedMood(m)}
+                      className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
+                        selectedMood === m
+                          ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
+                          : 'bg-pink-50 text-pink-900 border border-pink-100 hover:bg-pink-100'
+                      }`}
+                    >
+                      <span>{m}</span>
+                      {selectedMood === m && <CheckCircle2 size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
-            {/* Navigation Controls */}
-            <div className="flex items-center justify-between pt-4 border-t border-pink-100">
+            {/* Step 2: Day Feeling Question */}
+            {step === 2 && (
+              <div className="space-y-4 animate-fadeIn">
+                <h3 className="font-heading font-bold text-base text-pink-900">
+                  2. How does your day feel so far?
+                </h3>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {DAY_OPTIONS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSelectedDay(d)}
+                      className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
+                        selectedDay === d
+                          ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
+                          : 'bg-pink-50 text-pink-900 border border-pink-100 hover:bg-pink-100'
+                      }`}
+                    >
+                      <span>{d}</span>
+                      {selectedDay === d && <CheckCircle2 size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Current Need Question */}
+            {step === 3 && (
+              <div className="space-y-4 animate-fadeIn">
+                <h3 className="font-heading font-bold text-base text-pink-900">
+                  3. What does your heart need right now?
+                </h3>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {NEED_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSelectedNeed(n)}
+                      className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
+                        selectedNeed === n
+                          ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
+                          : 'bg-pink-50 text-pink-900 border border-pink-100 hover:bg-pink-100'
+                      }`}
+                    >
+                      <span>{n}</span>
+                      {selectedNeed === n && <CheckCircle2 size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Heart Word Question */}
+            {step === 4 && (
+              <div className="space-y-4 animate-fadeIn">
+                <h3 className="font-heading font-bold text-base text-pink-900">
+                  4. If you could pick one word for your heart today...
+                </h3>
+                <input
+                  type="text"
+                  value={heartWord}
+                  onChange={(e) => setHeartWord(e.target.value)}
+                  placeholder="e.g. Peaceful, Hopeful, Tired, Soft..."
+                  className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-sm text-center focus:outline-none focus:ring-2 focus:ring-pink-400"
+                />
+              </div>
+            )}
+
+            {/* Step 5: Shared Message Question */}
+            {step === 5 && (
+              <div className="space-y-4 animate-fadeIn">
+                <h3 className="font-heading font-bold text-base text-pink-900">
+                  5. Anything you want to leave here before you enter?
+                </h3>
+                <textarea
+                  rows={3}
+                  value={sharedMessage}
+                  onChange={(e) => setSharedMessage(e.target.value)}
+                  placeholder="Write a quiet message... (Optional)"
+                  className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
+                />
+              </div>
+            )}
+
+            {validationError && (
+              <p className="text-xs font-bold text-rose-600 animate-bounce">{validationError}</p>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex items-center justify-between gap-3 pt-2">
               {step > 1 ? (
                 <button
                   type="button"
                   onClick={handlePrevStep}
-                  className="px-5 py-2.5 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider hover:bg-pink-200 flex items-center space-x-1 transition-colors"
+                  className="px-4 py-2.5 rounded-full bg-pink-100 text-pink-950 font-bold text-xs flex items-center space-x-1 hover:bg-pink-200"
                 >
                   <ArrowLeft size={14} />
                   <span>Back</span>
                 </button>
-              ) : <div />}
+              ) : (
+                <div />
+              )}
 
               <button
                 type="button"
                 onClick={handleNextStep}
                 disabled={isSubmitting}
-                className="px-6 py-3 rounded-full bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg hover:scale-105 transition-all flex items-center space-x-1.5 ml-auto"
+                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1.5"
               >
-                <span>{step === 5 ? 'Enter My World ❤️' : 'Continue'}</span>
-                {step < 5 ? <ArrowRight size={14} /> : <Sparkles size={14} />}
+                <span>{step === 5 ? (isSubmitting ? 'Saving...' : 'Enter My World ❤️') : 'Next Question'}</span>
+                {step < 5 && <ArrowRight size={14} />}
               </button>
             </div>
 
