@@ -127,34 +127,32 @@ export function isUserAuthenticated() {
   if (!sess) return false;
   try {
     const parsed = JSON.parse(sess);
-    return Boolean(
-      parsed &&
-      parsed.role === 'user' &&
-      parsed.userId &&
-      parsed.token &&
-      parsed.token.startsWith('user_token_')
-    );
+    return Boolean(parsed && (parsed.role === 'user' || parsed.userId) && (parsed.token || parsed.id));
   } catch (e) {
     return false;
   }
 }
 
 export function getCurrentUser() {
-  if (!isUserAuthenticated()) return null;
   const sess = localStorage.getItem('amrita_user_token') || sessionStorage.getItem('amrita_user_token');
+  if (!sess) return null;
   try {
-    return JSON.parse(sess);
+    const parsed = JSON.parse(sess);
+    if (parsed && (parsed.role === 'user' || parsed.userId)) {
+      return parsed;
+    }
   } catch (e) {
     return null;
   }
+  return null;
 }
 
 export async function restoreUserSession() {
   // Check Supabase session first
-  if (supabase && supabase.auth) {
+  if (supabase && supabase.auth && typeof supabase.auth.getSession === 'function') {
     try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
+      const { data, error } = await supabase.auth.getSession();
+      if (!error && data?.session?.user) {
         const uId = data.session.user.user_metadata?.username || 'amritayadav';
         const userObj = {
           role: 'user',
@@ -179,8 +177,9 @@ export async function restoreUserSession() {
   if (currentUser) {
     localStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
     sessionStorage.setItem('amrita_user_token', JSON.stringify(currentUser));
+    return currentUser;
   }
-  return currentUser;
+  return null;
 }
 
 export async function logoutUser() {

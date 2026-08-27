@@ -7,6 +7,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storageKey: 'amrita_supabase_auth_token',
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
   },
 });
 
