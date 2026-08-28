@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import {
   fetchConstellations,
   getUserStarDiscoveries,
@@ -6,10 +6,57 @@ import {
   saveUserFavoriteMemory,
   evaluateUserProgress,
 } from '../../lib/supabase';
-import { Star, Sparkles, X, Heart, Lock, Unlock, Moon, Award, Compass, BookOpen } from 'lucide-react';
+import { Star, Sparkles, X, Heart, Lock, Unlock, Moon, Award, Compass, BookOpen, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export function ConstellationModal({ isOpen, onClose, currentUser }) {
+// 1. Error Boundary Component to guarantee zero white blank screen crashes
+class ConstellationErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.warn('[ConstellationErrorBoundary] Error caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-lg select-none">
+          <div className="glass-panel p-8 rounded-3xl max-w-md w-full border-2 border-pink-300 shadow-2xl bg-slate-900 text-center text-white space-y-4">
+            <div className="w-14 h-14 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center mx-auto shadow-inner">
+              <Sparkles size={28} />
+            </div>
+            <h3 className="font-heading font-extrabold text-xl text-pink-200">
+              Our Little Sky 🌌
+            </h3>
+            <p className="text-xs text-pink-300/90 font-semibold">
+              The night sky is reconnecting to the stars... ✨
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false });
+                if (this.props.onClose) this.props.onClose();
+              }}
+              className="w-full py-3 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-md"
+            >
+              Back to My World ❤️
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// 2. Main Constellation Sky Modal
+function ConstellationModalContent({ isOpen, onClose, currentUser }) {
   const [constellations, setConstellations] = useState([]);
   const [discoveredStarIds, setDiscoveredStarIds] = useState([]);
   const [userProgress, setUserProgress] = useState({});
@@ -35,18 +82,16 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
         evaluateUserProgress(uId),
       ]);
 
-      setConstellations(cData);
-      setDiscoveredStarIds(dData);
-      setUserProgress(pData);
-    } catch (e) {
-      console.warn('[ConstellationModal] Load error:', e);
+      setConstellations(cData || []);
+      setDiscoveredStarIds(dData || []);
+      setUserProgress(pData || {});
     } finally {
       setIsLoading(false);
     }
   };
 
   const isStarLocked = (star) => {
-    if (star.type !== 'locked') return false;
+    if (!star || star.type !== 'locked') return false;
     const reqVal = star.reqVal || 1;
     const userVal = userProgress[star.reqType] || 0;
     return userVal < reqVal;
@@ -67,21 +112,27 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
     setSaveMsg('');
 
     // Save star discovery
-    const updated = await saveUserStarDiscovery(uId, star.id);
-    setDiscoveredStarIds(updated);
+    try {
+      const updated = await saveUserStarDiscovery(uId, star.id);
+      setDiscoveredStarIds(updated || []);
 
-    // Check if whole constellation is completed
-    const allStarIds = constGroup.stars.map((s) => s.id);
-    const isNowComplete = allStarIds.every((id) => updated.includes(id));
+      // Check if whole constellation is completed
+      if (constGroup && constGroup.stars) {
+        const allStarIds = constGroup.stars.map((s) => s.id);
+        const isNowComplete = allStarIds.every((id) => (updated || []).includes(id));
 
-    if (isNowComplete) {
-      confetti({
-        particleCount: 70,
-        spread: 90,
-        origin: { y: 0.5 },
-        colors: ['#FFB6C1', '#FF69B4', '#E6E6FA'],
-      });
-      setCompletedConstellation(constGroup);
+        if (isNowComplete) {
+          confetti({
+            particleCount: 70,
+            spread: 90,
+            origin: { y: 0.5 },
+            colors: ['#FFB6C1', '#FF69B4', '#E6E6FA'],
+          });
+          setCompletedConstellation(constGroup);
+        }
+      }
+    } catch (e) {
+      console.warn('[ConstellationModal] Discovery error:', e);
     }
   };
 
@@ -106,7 +157,9 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
 
   const handleFindAnotherStar = () => {
     setActiveTab('sky');
+    if (!constellations || constellations.length === 0) return;
     for (const c of constellations) {
+      if (!c.stars) continue;
       for (const s of c.stars) {
         if (!discoveredStarIds.includes(s.id) && !isStarLocked(s)) {
           handleSelectStar(s, c);
@@ -118,14 +171,14 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
 
   if (!isOpen) return null;
 
-  const allStars = constellations.flatMap((c) => c.stars);
+  const allStars = (constellations || []).flatMap((c) => c.stars || []);
   const totalStars = allStars.length;
-  const discoveredCount = discoveredStarIds.length;
-  const discoveredStarList = allStars.filter((s) => discoveredStarIds.includes(s.id));
+  const discoveredCount = (discoveredStarIds || []).length;
+  const discoveredStarList = allStars.filter((s) => (discoveredStarIds || []).includes(s.id));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/60 backdrop-blur-lg animate-fadeIn select-none">
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-4xl w-full border-2 border-pink-300 shadow-2xl bg-slate-950/95 text-white text-left relative max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-lg animate-fadeIn select-none">
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-4xl w-full border-2 border-pink-300/70 shadow-2xl bg-gradient-to-b from-slate-950 via-purple-950/90 to-slate-950 text-white text-left relative max-h-[92vh] min-h-[450px] overflow-y-auto">
         
         {/* Close Button */}
         <button
@@ -187,12 +240,12 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
                 Lighting up the stars... ✨
               </div>
             ) : (
-              <div className="relative w-full h-80 sm:h-96 rounded-2xl bg-gradient-to-b from-slate-950 via-purple-950/40 to-slate-950 border border-pink-500/20 overflow-hidden shadow-inner flex items-center justify-center">
+              <div className="relative w-full h-80 sm:h-[400px] rounded-2xl bg-gradient-to-b from-slate-950 via-purple-950/50 to-slate-950 border border-pink-500/30 overflow-hidden shadow-inner flex items-center justify-center">
                 
                 {/* SVG Connecting Lines */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                   {constellations.map((c) =>
-                    c.stars.map((s, idx) => {
+                    (c.stars || []).map((s, idx) => {
                       if (idx === 0) return null;
                       const prev = c.stars[idx - 1];
                       const sDiscovered = discoveredStarIds.includes(s.id);
@@ -205,7 +258,7 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
                           y1={`${prev.y}%`}
                           x2={`${s.x}%`}
                           y2={`${s.y}%`}
-                          stroke={sDiscovered && pDiscovered ? '#FFB6C1' : 'rgba(255, 255, 255, 0.15)'}
+                          stroke={sDiscovered && pDiscovered ? '#FFB6C1' : 'rgba(255, 255, 255, 0.18)'}
                           strokeWidth={sDiscovered && pDiscovered ? '2' : '1'}
                           strokeDasharray={sDiscovered && pDiscovered ? 'none' : '4'}
                         />
@@ -216,7 +269,7 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
 
                 {/* Interactive Stars Grid */}
                 {constellations.map((c) =>
-                  c.stars.map((star) => {
+                  (c.stars || []).map((star) => {
                     const isDiscovered = discoveredStarIds.includes(star.id);
                     const locked = isStarLocked(star);
 
@@ -319,12 +372,12 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
           </div>
         )}
 
-        {/* Modal 1: Revealed Star Content Reader */}
-        {selectedSecret && (
+        {/* Modal 1: Revealed Star Content Reader (Fixed selectedStar reference bug) */}
+        {selectedStar && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md">
             <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white text-pink-950 border-2 border-pink-300 shadow-2xl text-center space-y-4 animate-scaleUp">
               
-              {selectedSecret.isLockedNotice ? (
+              {selectedStar.isLockedNotice ? (
                 <>
                   <div className="w-14 h-14 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mx-auto shadow-inner">
                     <Lock size={28} />
@@ -333,10 +386,10 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
                     🔒 This star is waiting for you...
                   </h3>
                   <p className="text-xs font-bold text-pink-800 bg-pink-50 p-4 rounded-2xl border border-pink-100">
-                    Complete requirement: <strong>{selectedSecret.reqVal}</strong> of type <em>{selectedSecret.reqType}</em> to unlock! ❤️
+                    Complete requirement: <strong>{selectedStar.reqVal}</strong> of type <em>{selectedStar.reqType}</em> to unlock! ❤️
                   </p>
                   <button
-                    onClick={() => setSelectedSecret(null)}
+                    onClick={() => setSelectedStar(null)}
                     className="w-full py-2.5 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
                   >
                     Got It 🌸
@@ -345,11 +398,11 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
               ) : (
                 <>
                   <div className="w-14 h-14 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center mx-auto shadow-inner">
-                    <Star size={28} className="fill-pink-500" />
+                    <Star size={28} className="fill-pink-500 text-pink-500" />
                   </div>
 
                   <span className="px-3 py-1 rounded-full bg-pink-100 text-pink-800 text-xs font-bold uppercase tracking-wider">
-                    {selectedSecret.name}
+                    {selectedStar.name}
                   </span>
 
                   <h3 className="font-heading font-extrabold text-2xl text-pink-950">
@@ -357,7 +410,7 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
                   </h3>
 
                   <p className="font-script text-2xl text-pink-800 leading-relaxed italic bg-pink-50 p-4 rounded-2xl border border-pink-100">
-                    "{selectedSecret.message}"
+                    "{selectedStar.message}"
                   </p>
 
                   {saveMsg && <p className="text-xs font-bold text-green-700 animate-bounce">{saveMsg}</p>}
@@ -372,7 +425,7 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
                     </button>
 
                     <button
-                      onClick={() => setSelectedSecret(null)}
+                      onClick={() => setSelectedStar(null)}
                       className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md"
                     >
                       Close ✨
@@ -413,5 +466,13 @@ export function ConstellationModal({ isOpen, onClose, currentUser }) {
 
       </div>
     </div>
+  );
+}
+
+export function ConstellationModal(props) {
+  return (
+    <ConstellationErrorBoundary onClose={props.onClose}>
+      <ConstellationModalContent {...props} />
+    </ConstellationErrorBoundary>
   );
 }
