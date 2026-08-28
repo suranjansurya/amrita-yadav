@@ -1177,7 +1177,54 @@ export function AdminDashboard({ onExit }) {
                     </div>
                   </div>
 
-                  {/* 3. Mood Analytics Summary & Feature Usage Grid */}
+                  {/* 3. Streak & Achievements Summary Card */}
+                  <div className="p-5 rounded-3xl bg-gradient-to-br from-amber-50 to-pink-50 border border-pink-200 shadow-sm space-y-3">
+                    <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-200/60 pb-2">
+                      <Trophy size={18} className="text-amber-500" />
+                      <span>🔥 STREAK & ACHIEVEMENTS SUMMARY</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
+                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Current Streak</span>
+                        <strong className="text-pink-950 text-base font-extrabold">🔥 {user360Data.stats.streak} Days</strong>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
+                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Longest Streak</span>
+                        <strong className="text-pink-950 text-base font-extrabold">🏆 {user360Data.stats.longestStreak} Days</strong>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
+                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Total Check-ins</span>
+                        <strong className="text-pink-950 text-base font-extrabold">💗 {user360Data.stats.totalCheckIns}</strong>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
+                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Achievements</span>
+                        <strong className="text-pink-950 text-base font-extrabold">🏅 {user360Data.stats.unlockedCount} / {user360Data.stats.totalCount}</strong>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 space-y-1">
+                      <span className="text-xs font-bold text-pink-900 block">Unlocked Badges:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {user360Data.achievementsData?.achievements
+                          ?.filter((a) => a.isUnlocked)
+                          ?.map((a) => (
+                            <span key={a.id} className="px-2.5 py-1 rounded-full bg-white text-pink-950 font-bold text-xs border border-pink-200 shadow-2xs flex items-center space-x-1">
+                              <span>{a.icon}</span>
+                              <span>{a.title}</span>
+                            </span>
+                          ))}
+                        {(!user360Data.achievementsData?.achievements?.some((a) => a.isUnlocked)) && (
+                          <span className="text-xs text-pink-600 italic">No achievements unlocked yet.</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Mood Analytics Summary & Feature Usage Grid */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     
                     {/* Mood Summary Card */}

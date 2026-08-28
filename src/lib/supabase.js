@@ -376,6 +376,338 @@ export async function fetchJournalEntries(filter = 'All') {
   });
 }
 
+export const ACHIEVEMENTS_CATALOG = [
+  {
+    id: 'first_checkin',
+    title: '🏆 FIRST CHECK-IN',
+    description: 'Complete your first daily check-in.',
+    icon: '🏆',
+    target: 1,
+    category: 'checkin',
+  },
+  {
+    id: 'streak_3',
+    title: '🔥 3 DAY STREAK',
+    description: 'Complete 3 consecutive check-in days.',
+    icon: '🔥',
+    target: 3,
+    category: 'streak',
+  },
+  {
+    id: 'streak_7',
+    title: '🔥 7 DAY STREAK',
+    description: 'Complete 7 consecutive check-in days.',
+    icon: '🔥',
+    target: 7,
+    category: 'streak',
+  },
+  {
+    id: 'streak_14',
+    title: '🔥 14 DAY STREAK',
+    description: 'Complete 14 consecutive check-in days.',
+    icon: '🔥',
+    target: 14,
+    category: 'streak',
+  },
+  {
+    id: 'streak_30',
+    title: '🔥 30 DAY STREAK',
+    description: 'Complete 30 consecutive check-in days.',
+    icon: '🔥',
+    target: 30,
+    category: 'streak',
+  },
+  {
+    id: 'checkins_10',
+    title: '💗 10 CHECK-INS',
+    description: 'Complete 10 total daily check-ins.',
+    icon: '💗',
+    target: 10,
+    category: 'checkin_count',
+  },
+  {
+    id: 'checkins_30',
+    title: '💗 30 CHECK-INS',
+    description: 'Complete 30 total daily check-ins.',
+    icon: '💗',
+    target: 30,
+    category: 'checkin_count',
+  },
+  {
+    id: 'mood_explorer',
+    title: '🌸 MOOD EXPLORER',
+    description: 'Complete 7 mood check-ins.',
+    icon: '🌸',
+    target: 7,
+    category: 'mood',
+  },
+  {
+    id: 'feature_explorer',
+    title: '✨ FEATURE EXPLORER',
+    description: 'Use 5 different website features.',
+    icon: '✨',
+    target: 5,
+    category: 'features',
+  },
+  {
+    id: 'memory_keeper',
+    title: '💌 MEMORY KEEPER',
+    description: 'Open or view Memory features 5 times.',
+    icon: '💌',
+    target: 5,
+    category: 'memory',
+  },
+  {
+    id: 'hug_master',
+    title: '🤗 HUG MASTER',
+    description: 'Send or receive Digital Hugs 5 times.',
+    icon: '🤗',
+    target: 5,
+    category: 'hug',
+  },
+  {
+    id: 'surprise_seeker',
+    title: '🎁 SURPRISE SEEKER',
+    description: 'Open the Surprise feature 5 times.',
+    icon: '🎁',
+    target: 5,
+    category: 'surprise',
+  },
+];
+
+export function calculateStreak(checkInRecords) {
+  if (!checkInRecords || checkInRecords.length === 0) {
+    return { currentStreak: 0, longestStreak: 0, uniqueDates: [] };
+  }
+
+  const dateKeys = Array.from(
+    new Set(
+      checkInRecords.map((r) => {
+        const d = new Date(r.created_at || Date.now());
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      })
+    )
+  ).sort();
+
+  if (dateKeys.length === 0) {
+    return { currentStreak: 0, longestStreak: 0, uniqueDates: [] };
+  }
+
+  let longestStreak = 1;
+  let currentRun = 1;
+
+  for (let i = 1; i < dateKeys.length; i++) {
+    const prev = new Date(dateKeys[i - 1]);
+    const curr = new Date(dateKeys[i]);
+    const diffDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentRun += 1;
+    } else if (diffDays > 1) {
+      currentRun = 1;
+    }
+    if (currentRun > longestStreak) {
+      longestStreak = currentRun;
+    }
+  }
+
+  const todayKey = getTodayDateKey();
+  const yesterdayDate = new Date(todayKey);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayKey = yesterdayDate.toISOString().split('T')[0];
+
+  const hasToday = dateKeys.includes(todayKey);
+  const hasYesterday = dateKeys.includes(yesterdayKey);
+
+  let currentStreak = 0;
+
+  if (hasToday || hasYesterday) {
+    let checkDate = hasToday ? new Date(todayKey) : new Date(yesterdayKey);
+
+    while (true) {
+      const key = checkDate.toISOString().split('T')[0];
+      if (dateKeys.includes(key)) {
+        currentStreak += 1;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+  }
+
+  return {
+    currentStreak,
+    longestStreak: Math.max(longestStreak, currentStreak),
+    uniqueDates: dateKeys,
+  };
+}
+
+export function getWeeklyStreakStatus(checkInRecords) {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - distanceToMonday);
+
+  const daysLabel = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  const todayKey = getTodayDateKey();
+
+  const userDateKeys = new Set(
+    (checkInRecords || []).map((r) => {
+      const d = new Date(r.created_at || Date.now());
+      return d.toISOString().split('T')[0];
+    })
+  );
+
+  return daysLabel.map((dayName, idx) => {
+    const curDate = new Date(monday);
+    curDate.setDate(monday.getDate() + idx);
+    const dateKey = curDate.toISOString().split('T')[0];
+
+    const isCompleted = userDateKeys.has(dateKey);
+    const isToday = dateKey === todayKey;
+
+    let symbol = '○';
+    let statusClass = 'not_completed';
+
+    if (isCompleted) {
+      symbol = '✅';
+      statusClass = 'completed';
+    } else if (isToday) {
+      symbol = '❤️';
+      statusClass = 'today_pending';
+    }
+
+    return {
+      dayName,
+      dateKey,
+      symbol,
+      isCompleted,
+      isToday,
+      statusClass,
+    };
+  });
+}
+
+export async function getUserAchievements(user_id = 'usr-amritayadav') {
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+
+  const [allHeart, allActivities] = await Promise.all([
+    fetchHeartCheckIns('All'),
+    fetchUserActivityTimeline(user_id, 'All'),
+  ]);
+
+  const userHeart = (allHeart || []).filter(
+    (h) => String(h.user_id || '').replace(/^usr-/, '').toLowerCase() === cleanId
+  );
+  const userActivities = (allActivities || []).filter(
+    (a) => String(a.user_id || '').replace(/^usr-/, '').toLowerCase() === cleanId
+  );
+
+  const streakData = calculateStreak(userHeart);
+
+  const featureUsage = {
+    mood: 0,
+    featuresSet: new Set(),
+    memory: 0,
+    hug: 0,
+    surprise: 0,
+  };
+
+  userActivities.forEach((act) => {
+    const title = String(act.title || '').toLowerCase();
+    const type = String(act.event_type || '').toLowerCase();
+
+    if (title.includes('mood') || type.includes('mood')) featureUsage.mood += 1;
+    if (title.includes('memory') || title.includes('jar') || type.includes('jar')) featureUsage.memory += 1;
+    if (title.includes('hug') || type.includes('hug')) featureUsage.hug += 1;
+    if (title.includes('surprise') || type.includes('surprise')) featureUsage.surprise += 1;
+
+    if (title.includes('just for you') || type.includes('justforyou')) featureUsage.featuresSet.add('justforyou');
+    if (title.includes('star') || title.includes('sky')) featureUsage.featuresSet.add('sky');
+    if (title.includes('hug')) featureUsage.featuresSet.add('hug');
+    if (title.includes('surprise')) featureUsage.featuresSet.add('surprise');
+    if (title.includes('jar')) featureUsage.featuresSet.add('jar');
+    if (title.includes('memory')) featureUsage.featuresSet.add('memory');
+    if (title.includes('mood')) featureUsage.featuresSet.add('mood');
+    if (title.includes('journal')) featureUsage.featuresSet.add('journal');
+  });
+
+  const localUnlocked = JSON.parse(
+    localStorage.getItem(`amrita_user_achievements_${cleanId}`) || '[]'
+  );
+  const unlockedSet = new Set(localUnlocked.map((a) => a.achievement_id));
+
+  const newlyUnlockedList = [];
+
+  const results = ACHIEVEMENTS_CATALOG.map((ach) => {
+    let progress = 0;
+
+    if (ach.id === 'first_checkin') progress = Math.min(userHeart.length, 1);
+    else if (ach.id === 'streak_3') progress = Math.min(streakData.longestStreak, 3);
+    else if (ach.id === 'streak_7') progress = Math.min(streakData.longestStreak, 7);
+    else if (ach.id === 'streak_14') progress = Math.min(streakData.longestStreak, 14);
+    else if (ach.id === 'streak_30') progress = Math.min(streakData.longestStreak, 30);
+    else if (ach.id === 'checkins_10') progress = Math.min(userHeart.length, 10);
+    else if (ach.id === 'checkins_30') progress = Math.min(userHeart.length, 30);
+    else if (ach.id === 'mood_explorer') progress = Math.min(featureUsage.mood, 7);
+    else if (ach.id === 'feature_explorer') progress = Math.min(featureUsage.featuresSet.size, 5);
+    else if (ach.id === 'memory_keeper') progress = Math.min(featureUsage.memory, 5);
+    else if (ach.id === 'hug_master') progress = Math.min(featureUsage.hug, 5);
+    else if (ach.id === 'surprise_seeker') progress = Math.min(featureUsage.surprise, 5);
+
+    const isUnlockedNow = progress >= ach.target;
+
+    if (isUnlockedNow && !unlockedSet.has(ach.id)) {
+      const record = {
+        achievement_id: ach.id,
+        unlockedAt: new Date().toISOString(),
+      };
+      localUnlocked.push(record);
+      unlockedSet.add(ach.id);
+      newlyUnlockedList.push(ach);
+
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        try {
+          supabase.from('user_achievements').upsert([
+            {
+              user_id: cleanId,
+              achievement_id: ach.id,
+              unlocked_at: record.unlockedAt,
+            },
+          ]);
+        } catch (e) {
+          // Fallback ignore
+        }
+      }
+    }
+
+    const isUnlocked = unlockedSet.has(ach.id);
+
+    return {
+      ...ach,
+      progress: isUnlocked ? ach.target : progress,
+      isUnlocked,
+      unlockedAt: isUnlocked ? (localUnlocked.find((u) => u.achievement_id === ach.id)?.unlockedAt || new Date().toISOString()) : null,
+    };
+  });
+
+  if (newlyUnlockedList.length > 0) {
+    localStorage.setItem(`amrita_user_achievements_${cleanId}`, JSON.stringify(localUnlocked));
+  }
+
+  return {
+    streakData,
+    achievements: results,
+    newlyUnlocked: newlyUnlockedList,
+    unlockedCount: results.filter((r) => r.isUnlocked).length,
+  };
+}
+
 export function getTodayDateKey() {
   const d = new Date();
   const year = d.getFullYear();
@@ -695,12 +1027,13 @@ export async function fetchMoodAnalytics({ dateFilter = 'All Time', userFilter =
 export async function fetchUser360Profile(userId = 'amritayadav') {
   const cleanId = String(userId).replace(/^usr-/, '').toLowerCase();
 
-  const [allResponses, allActivities, allHeart, allAuditLogs, moodAnalytics] = await Promise.all([
+  const [allResponses, allActivities, allHeart, allAuditLogs, moodAnalytics, achData] = await Promise.all([
     fetchAllUserResponses('All'),
     fetchUserActivityTimeline(userId, 'All'),
     fetchUserHeartHistory(userId),
     fetchAdminAuditLogs(),
     fetchMoodAnalytics({ dateFilter: 'All Time', userFilter: userId }),
+    getUserAchievements(userId),
   ]);
 
   const userResponses = (allResponses || []).filter(
@@ -755,13 +1088,17 @@ export async function fetchUser360Profile(userId = 'amritayadav') {
     auditLogs: userAuditLogs,
     moodAnalytics,
     featureUsage,
+    achievementsData: achData,
     stats: {
       totalCheckIns: (allHeart || []).length,
-      streak: moodAnalytics.streak || 0,
+      streak: achData.streakData.currentStreak,
+      longestStreak: achData.streakData.longestStreak,
       activeDays: activeDates.length,
       totalAnswers: userResponses.length,
       totalActivities: userActivities.length,
       featuresUsedCount: usedFeaturesCount,
+      unlockedCount: achData.unlockedCount,
+      totalCount: achData.totalCount,
       lastActive: lastActiveTime,
     },
   };

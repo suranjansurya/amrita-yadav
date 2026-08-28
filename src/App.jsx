@@ -45,6 +45,8 @@ import { OpenWhenModal } from './components/common/OpenWhenModal';
 
 import { LogOut, User, Heart, Sparkles, Archive, Gift, Moon, Lock, Compass, Mail } from 'lucide-react';
 
+import { StreakDashboardCard } from './components/common/StreakDashboardCard';
+
 // Phase 1 & 2 Sections
 import { Section01Hero } from './components/sections/Section01Hero';
 import { Section02Welcome } from './components/sections/Section02Welcome';
@@ -392,6 +394,15 @@ export default function App() {
         {/* Phase 1 & 2 */}
         <Section01Hero onEnterWorld={handleEnterWorld} enterGlow={enterGlow} />
         <Section02Welcome />
+
+        {/* Phase 33: Daily Streak & Achievement Dashboard Card */}
+        <div className="max-w-3xl mx-auto px-4 my-8 relative z-20">
+          <StreakDashboardCard
+            userId={currentUser?.userId || 'amritayadav'}
+            onOpenCheckIn={() => setIsHeartCheckInDone(false)}
+          />
+        </div>
+
         <Section03WhyThisExists />
 
         {/* Phase 3 */}
