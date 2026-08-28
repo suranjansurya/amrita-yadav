@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { User, LogOut, Menu, X, Sparkles, Heart, Compass } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, LogOut, X, Sparkles, Heart, MoreVertical } from 'lucide-react';
 
 export function SidebarNav({ currentUser, onOpenFeature, onLogout }) {
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
+  const [isManualExpanded, setIsManualExpanded] = useState(false);
+  const sidebarRef = useRef(null);
 
   const userName = currentUser?.displayName || currentUser?.userId || 'Amrita Yadav';
 
@@ -19,45 +21,121 @@ export function SidebarNav({ currentUser, onOpenFeature, onLogout }) {
     { id: 'moods', label: 'Daily Moods', icon: '🌸', color: 'from-pink-400 to-purple-400' },
   ];
 
+  // Passive scroll listener with rAF throttling & 60px threshold
+  useEffect(() => {
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY || document.documentElement.scrollTop;
+          // Threshold of 60px to prevent flickering on micro-scrolls
+          if (scrollY <= 60) {
+            setIsAtTop(true);
+          } else {
+            setIsAtTop(false);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    // Initial check
+    handleScroll();
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ESC key listener to close temporary expanded menu
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isManualExpanded) {
+        setIsManualExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isManualExpanded]);
+
+  // Click outside listener when manually expanded
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        isManualExpanded &&
+        sidebarRef.current &&
+        !sidebarRef.current.contains(e.target)
+      ) {
+        setIsManualExpanded(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isManualExpanded]);
+
   const handleSelectNav = (id) => {
     onOpenFeature(id);
-    setIsMobileOpen(false);
+    setIsManualExpanded(false);
   };
 
   const handleLogoutClick = () => {
     onLogout();
-    setIsMobileOpen(false);
+    setIsManualExpanded(false);
   };
+
+  const showFullMenu = isAtTop || isManualExpanded;
 
   return (
     <>
-      {/* Mobile Toggle Floating Button */}
-      <div className="fixed top-4 left-4 z-40 md:hidden">
-        <button
-          onClick={() => setIsMobileOpen((prev) => !prev)}
-          className="glass-panel px-4 py-2.5 rounded-full border border-pink-300 shadow-lg bg-white/90 text-pink-900 text-xs font-extrabold flex items-center space-x-2 active:scale-95 transition-all"
-        >
-          {isMobileOpen ? <X size={18} className="text-pink-600" /> : <Menu size={18} className="text-pink-600" />}
-          <span>{isMobileOpen ? 'Close Menu' : '🌸 Menu'}</span>
-        </button>
-      </div>
+      {/* Collapsed Mode Floating Three-Dot Button (Shown when user has scrolled away & menu is closed) */}
+      {!showFullMenu && (
+        <div className="fixed top-4 left-4 z-40 animate-fadeIn">
+          <button
+            onClick={() => setIsManualExpanded(true)}
+            aria-label="Open navigation menu"
+            className="glass-panel w-12 h-12 rounded-full border-2 border-pink-300 shadow-xl bg-white/95 text-pink-900 flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer group"
+            title="Open Navigation Menu"
+          >
+            <MoreVertical size={22} className="text-pink-600 group-hover:scale-110 transition-transform" />
+          </button>
+        </div>
+      )}
 
-      {/* Backdrop overlay for mobile drawer */}
-      {isMobileOpen && (
+      {/* Backdrop overlay when menu is manually expanded away from top */}
+      {!isAtTop && isManualExpanded && (
         <div
-          onClick={() => setIsMobileOpen(false)}
-          className="fixed inset-0 z-40 bg-pink-950/40 backdrop-blur-sm md:hidden animate-fadeIn"
+          onClick={() => setIsManualExpanded(false)}
+          className="fixed inset-0 z-40 bg-pink-950/30 backdrop-blur-xs animate-fadeIn transition-opacity duration-300"
+          aria-label="Close navigation menu"
         />
       )}
 
       {/* Main Vertical Sidebar Container */}
       <aside
-        className={`fixed top-4 md:top-6 left-4 md:left-6 z-40 w-64 max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] glass-panel rounded-3xl border-2 border-pink-200/80 shadow-2xl bg-white/90 backdrop-blur-xl flex flex-col justify-between p-4 transition-all duration-300 select-none ${
-          isMobileOpen
-            ? 'translate-x-0 opacity-100'
-            : '-translate-x-full md:translate-x-0 opacity-0 md:opacity-100 pointer-events-none md:pointer-events-auto'
+        ref={sidebarRef}
+        aria-label={showFullMenu ? 'Navigation Menu' : 'Collapsed Navigation'}
+        className={`fixed top-4 md:top-6 left-4 md:left-6 z-50 w-64 max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] glass-panel rounded-3xl border-2 border-pink-200/80 shadow-2xl bg-white/95 backdrop-blur-xl flex flex-col justify-between p-4 transition-all duration-300 ease-in-out select-none ${
+          showFullMenu
+            ? 'translate-x-0 opacity-100 scale-100 pointer-events-auto shadow-2xl'
+            : '-translate-x-full md:-translate-x-[120%] opacity-0 scale-95 pointer-events-none'
         }`}
       >
+        {/* Close Button when manually expanded away from top */}
+        {!isAtTop && (
+          <button
+            onClick={() => setIsManualExpanded(false)}
+            aria-label="Close navigation menu"
+            className="absolute top-3 right-3 p-1.5 rounded-full bg-pink-100 text-pink-800 hover:bg-pink-200 transition-colors z-20"
+          >
+            <X size={16} />
+          </button>
+        )}
+
         {/* Subtle Vertical Background Accent Glow */}
         <div className="absolute left-6 top-16 bottom-16 w-0.5 bg-gradient-to-b from-pink-300 via-rose-200 to-pink-300 opacity-40 pointer-events-none rounded-full" />
 
@@ -78,7 +156,7 @@ export function SidebarNav({ currentUser, onOpenFeature, onLogout }) {
           </p>
         </div>
 
-        {/* Middle Navigation Column (Scrollable if screen height is constrained) */}
+        {/* Middle Navigation Column */}
         <nav className="relative z-10 space-y-1.5 overflow-y-auto pr-1 flex-1 scrollbar-thin scrollbar-thumb-pink-200">
           {NAV_ITEMS.map((item) => (
             <button
