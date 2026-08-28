@@ -9,7 +9,7 @@ import {
   restoreUserSession,
   logoutUser,
 } from './lib/auth';
-import { supabase } from './lib/supabase';
+import { supabase, hasCompletedDailyCheckIn, getTodayDateKey } from './lib/supabase';
 
 // 3D Background Canvas & Animations
 import { DreamCanvas } from './components/3d/DreamCanvas';
@@ -160,11 +160,7 @@ export default function App() {
         if (usr) {
           setCurrentUser(usr);
           const uId = usr.userId || 'amritayadav';
-          const isDone = Boolean(
-            localStorage.getItem(`amrita_heart_checkin_completed_${uId}`) ||
-            sessionStorage.getItem(`amrita_heart_checkin_completed_${uId}`) ||
-            sessionStorage.getItem('amrita_heart_checkin_completed')
-          );
+          const isDone = hasCompletedDailyCheckIn(uId);
           setIsHeartCheckInDone(isDone);
         }
       } catch (e) {
@@ -180,7 +176,10 @@ export default function App() {
       const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
           const usr = getCurrentUser();
-          if (usr) setCurrentUser(usr);
+          if (usr) {
+            setCurrentUser(usr);
+            setIsHeartCheckInDone(hasCompletedDailyCheckIn(usr.userId));
+          }
         } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
           setIsHeartCheckInDone(false);
@@ -256,9 +255,9 @@ export default function App() {
 
   const handleHeartCheckInComplete = () => {
     const uId = currentUser?.userId || 'amritayadav';
-    localStorage.setItem(`amrita_heart_checkin_completed_${uId}`, 'true');
-    sessionStorage.setItem(`amrita_heart_checkin_completed_${uId}`, 'true');
-    sessionStorage.setItem('amrita_heart_checkin_completed', 'true');
+    const todayKey = getTodayDateKey();
+    localStorage.setItem(`amrita_daily_checkin_completed_${uId}_${todayKey}`, 'true');
+    sessionStorage.setItem(`amrita_daily_checkin_completed_${uId}_${todayKey}`, 'true');
     setIsHeartCheckInDone(true);
   };
 
@@ -304,11 +303,7 @@ export default function App() {
         onLoginSuccess={(usr) => {
           setCurrentUser(usr);
           const uId = usr.userId || 'amritayadav';
-          const isDone = Boolean(
-            localStorage.getItem(`amrita_heart_checkin_completed_${uId}`) ||
-            sessionStorage.getItem(`amrita_heart_checkin_completed_${uId}`) ||
-            sessionStorage.getItem('amrita_heart_checkin_completed')
-          );
+          const isDone = hasCompletedDailyCheckIn(uId);
           setIsHeartCheckInDone(isDone);
         }}
         onOpenAdmin={() => setIsAdminOpen(true)}

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTimeBasedGreeting } from '../../hooks/useTimeBasedGreeting';
-import { saveOrUpdateHeartCheckIn, saveUserActivity } from '../../lib/supabase';
+import { saveOrUpdateHeartCheckIn, saveUserActivity, getTodayDateKey } from '../../lib/supabase';
 import { Heart, Sparkles, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -36,20 +36,113 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
   const [showResponse, setShowResponse] = useState(false);
   const [validationError, setValidationError] = useState('');
 
+  const uId = currentUser?.userId || 'amritayadav';
+  const todayKey = getTodayDateKey();
+
+  // Restore Partial Completion Progress for Today
+  useEffect(() => {
+    try {
+      const draftStr = localStorage.getItem(`amrita_daily_checkin_draft_${uId}_${todayKey}`);
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        if (draft) {
+          if (draft.step) setStep(draft.step);
+          if (draft.selectedMood) setSelectedMood(draft.selectedMood);
+          if (draft.selectedDay) setSelectedDay(draft.selectedDay);
+          if (draft.selectedNeed) setSelectedNeed(draft.selectedNeed);
+          if (draft.heartWord) setHeartWord(draft.heartWord);
+          if (draft.sharedMessage) setSharedMessage(draft.sharedMessage);
+        }
+      } else {
+        // Track checkin started
+        saveUserActivity({
+          event_type: 'daily_checkin_started',
+          title: '❤️ Daily Check-in Started',
+          description: `User @${uId} started daily check-in for date ${todayKey}`,
+          metadata: { checkin_date: todayKey, username: uId },
+          user_id: uId,
+        });
+      }
+    } catch (e) {
+      console.warn('[HeartCheckIn] Draft restore warning:', e);
+    }
+  }, [uId, todayKey]);
+
+  // Helper to save partial progress
+  const saveDraft = (nextStep, moodVal, dayVal, needVal, wordVal, msgVal) => {
+    try {
+      const draft = {
+        step: nextStep,
+        selectedMood: moodVal !== undefined ? moodVal : selectedMood,
+        selectedDay: dayVal !== undefined ? dayVal : selectedDay,
+        selectedNeed: needVal !== undefined ? needVal : selectedNeed,
+        heartWord: wordVal !== undefined ? wordVal : heartWord,
+        sharedMessage: msgVal !== undefined ? msgVal : sharedMessage,
+        checkin_date: todayKey,
+      };
+      localStorage.setItem(`amrita_daily_checkin_draft_${uId}_${todayKey}`, JSON.stringify(draft));
+    } catch (e) {
+      console.warn('[HeartCheckIn] Save draft warning:', e);
+    }
+  };
+
   const handleNextStep = () => {
     setValidationError('');
 
-    if (step === 1 && !selectedMood) {
-      setValidationError('Please select how you feel today ❤️');
-      return;
+    if (step === 1) {
+      if (!selectedMood) {
+        setValidationError('Please select how you feel today ❤️');
+        return;
+      }
+      saveDraft(2, selectedMood, selectedDay, selectedNeed, heartWord, sharedMessage);
+      saveUserActivity({
+        event_type: 'daily_question_answered',
+        title: '💬 Question 1 Answered',
+        description: `Q1: How are you feeling today? -> ${selectedMood}`,
+        metadata: { question: 'How are you feeling today?', answer: selectedMood, checkin_date: todayKey },
+        user_id: uId,
+      });
     }
-    if (step === 2 && !selectedDay) {
-      setValidationError('Please select how your day was ✨');
-      return;
+
+    if (step === 2) {
+      if (!selectedDay) {
+        setValidationError('Please select how your day was ✨');
+        return;
+      }
+      saveDraft(3, selectedMood, selectedDay, selectedNeed, heartWord, sharedMessage);
+      saveUserActivity({
+        event_type: 'daily_question_answered',
+        title: '💬 Question 2 Answered',
+        description: `Q2: How does your day feel so far? -> ${selectedDay}`,
+        metadata: { question: 'How does your day feel so far?', answer: selectedDay, checkin_date: todayKey },
+        user_id: uId,
+      });
     }
-    if (step === 3 && !selectedNeed) {
-      setValidationError('Please select what you need right now 💕');
-      return;
+
+    if (step === 3) {
+      if (!selectedNeed) {
+        setValidationError('Please select what you need right now 💕');
+        return;
+      }
+      saveDraft(4, selectedMood, selectedDay, selectedNeed, heartWord, sharedMessage);
+      saveUserActivity({
+        event_type: 'daily_question_answered',
+        title: '💬 Question 3 Answered',
+        description: `Q3: What does your heart need right now? -> ${selectedNeed}`,
+        metadata: { question: 'What does your heart need right now?', answer: selectedNeed, checkin_date: todayKey },
+        user_id: uId,
+      });
+    }
+
+    if (step === 4) {
+      saveDraft(5, selectedMood, selectedDay, selectedNeed, heartWord, sharedMessage);
+      saveUserActivity({
+        event_type: 'daily_question_answered',
+        title: '💬 Question 4 Answered',
+        description: `Q4: One word for your heart today -> ${heartWord || 'Peace'}`,
+        metadata: { question: 'If you could pick one word for your heart today...', answer: heartWord || 'Peace', checkin_date: todayKey },
+        user_id: uId,
+      });
     }
 
     if (step < 5) {
@@ -62,13 +155,14 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
   const handlePrevStep = () => {
     setValidationError('');
     if (step > 1) {
-      setStep((prev) => prev - 1);
+      const prevStep = step - 1;
+      setStep(prevStep);
+      saveDraft(prevStep, selectedMood, selectedDay, selectedNeed, heartWord, sharedMessage);
     }
   };
 
   const handleSubmitCheckIn = async () => {
     setIsSubmitting(true);
-    const uId = currentUser?.userId || 'usr-amritayadav';
 
     try {
       // Save Consolidated Heart Check-in Record
@@ -81,28 +175,28 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
         shared_message: sharedMessage,
       });
 
-      // Explicitly Save ALL 5 Login/Onboarding Questions individually for Admin Response Center
-      const questionsList = [
-        { q: 'How are you feeling today?', a: selectedMood },
-        { q: 'How does your day feel so far?', a: selectedDay },
-        { q: 'What does your heart need right now?', a: selectedNeed },
-        { q: 'If you could pick one word for your heart today...', a: heartWord.trim() || 'Peace' },
-        { q: 'Anything you want to leave here before you enter?', a: sharedMessage.trim() || 'Just stepping into my world ❤️' },
-      ];
+      // Save Q5 activity
+      saveUserActivity({
+        event_type: 'daily_question_answered',
+        title: '💬 Question 5 Answered',
+        description: `Q5: Message -> ${sharedMessage || 'Stepping into world ❤️'}`,
+        metadata: { question: 'Anything you want to leave here before you enter?', answer: sharedMessage || 'Stepping into world ❤️', checkin_date: todayKey },
+        user_id: uId,
+      });
 
-      for (const item of questionsList) {
-        await saveUserActivity({
-          event_type: 'question_answer',
-          title: `💬 Onboarding Q: ${item.q}`,
-          description: `Q: ${item.q} | A: ${item.a}`,
-          metadata: {
-            question: item.q,
-            answer: item.a,
-            source: 'login_onboarding',
-          },
-          user_id: uId,
-        });
-      }
+      // Mark Daily Check-in Completed for Today & Clear Draft
+      localStorage.setItem(`amrita_daily_checkin_completed_${uId}_${todayKey}`, 'true');
+      sessionStorage.setItem(`amrita_daily_checkin_completed_${uId}_${todayKey}`, 'true');
+      localStorage.removeItem(`amrita_daily_checkin_draft_${uId}_${todayKey}`);
+
+      // Log Completion Activity
+      saveUserActivity({
+        event_type: 'daily_checkin_completed',
+        title: '❤️ Daily Check-in Completed',
+        description: `User @${uId} completed daily check-in for date ${todayKey}`,
+        metadata: { checkin_date: todayKey, username: uId },
+        user_id: uId,
+      });
 
       confetti({
         particleCount: 60,
@@ -161,7 +255,7 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
             <div className="flex items-center justify-between text-xs font-bold text-pink-700 border-b border-pink-100 pb-3">
               <span className="flex items-center space-x-1">
                 <Heart size={14} className="fill-pink-400 text-pink-400" />
-                <span>Heart Check-in</span>
+                <span>Daily Heart Check-in ({todayKey})</span>
               </span>
               <span>Step {step} of 5</span>
             </div>
@@ -172,7 +266,7 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                 Welcome back, {currentUser?.displayName || 'Amrita'} ❤️
               </h2>
               <p className="text-xs text-pink-700 font-semibold">
-                Before you enter my little world... how is your heart today?
+                Before you enter my little world today... how is your heart?
               </p>
             </div>
 
@@ -187,7 +281,10 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setSelectedMood(m)}
+                      onClick={() => {
+                        setSelectedMood(m);
+                        saveDraft(1, m, selectedDay, selectedNeed, heartWord, sharedMessage);
+                      }}
                       className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
                         selectedMood === m
                           ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
@@ -213,7 +310,10 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                     <button
                       key={d}
                       type="button"
-                      onClick={() => setSelectedDay(d)}
+                      onClick={() => {
+                        setSelectedDay(d);
+                        saveDraft(2, selectedMood, d, selectedNeed, heartWord, sharedMessage);
+                      }}
                       className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
                         selectedDay === d
                           ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
@@ -239,7 +339,10 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                     <button
                       key={n}
                       type="button"
-                      onClick={() => setSelectedNeed(n)}
+                      onClick={() => {
+                        setSelectedNeed(n);
+                        saveDraft(3, selectedMood, selectedDay, n, heartWord, sharedMessage);
+                      }}
                       className={`p-3.5 rounded-2xl text-left font-bold text-xs transition-all flex items-center justify-between ${
                         selectedNeed === n
                           ? 'bg-pink-500 text-white shadow-md scale-[1.01]'
@@ -263,7 +366,10 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                 <input
                   type="text"
                   value={heartWord}
-                  onChange={(e) => setHeartWord(e.target.value)}
+                  onChange={(e) => {
+                    setHeartWord(e.target.value);
+                    saveDraft(4, selectedMood, selectedDay, selectedNeed, e.target.value, sharedMessage);
+                  }}
                   placeholder="e.g. Peaceful, Hopeful, Tired, Soft..."
                   className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-sm text-center focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
@@ -279,7 +385,10 @@ export function HeartCheckInModal({ currentUser, onComplete }) {
                 <textarea
                   rows={3}
                   value={sharedMessage}
-                  onChange={(e) => setSharedMessage(e.target.value)}
+                  onChange={(e) => {
+                    setSharedMessage(e.target.value);
+                    saveDraft(5, selectedMood, selectedDay, selectedNeed, heartWord, e.target.value);
+                  }}
                   placeholder="Write a quiet message... (Optional)"
                   className="w-full p-4 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
                 />

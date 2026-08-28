@@ -376,11 +376,44 @@ export async function fetchJournalEntries(filter = 'All') {
   });
 }
 
+export function getTodayDateKey() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function hasCompletedDailyCheckIn(user_id = 'usr-amritayadav') {
+  if (!user_id) return false;
+  const cleanId = String(user_id).replace(/^usr-/, '');
+  const todayKey = getTodayDateKey();
+
+  const isFlagDone = Boolean(
+    localStorage.getItem(`amrita_daily_checkin_completed_${cleanId}_${todayKey}`) ||
+    sessionStorage.getItem(`amrita_daily_checkin_completed_${cleanId}_${todayKey}`)
+  );
+  if (isFlagDone) return true;
+
+  const localHistory = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
+  const todayStr = new Date().toDateString();
+  const match = localHistory.find(
+    (e) => (e.user_id === cleanId || e.user_id === `usr-${cleanId}` || e.user_id === user_id) && new Date(e.created_at).toDateString() === todayStr
+  );
+
+  if (match) {
+    localStorage.setItem(`amrita_daily_checkin_completed_${cleanId}_${todayKey}`, 'true');
+    return true;
+  }
+
+  return false;
+}
+
 export async function getTodayHeartCheckIn(user_id = 'usr-amritayadav') {
   const localHistory = JSON.parse(localStorage.getItem('amrita_heart_checkins_history') || '[]');
   const todayStr = new Date().toDateString();
   const todayEntry = localHistory.find(
-    (e) => e.user_id === user_id && new Date(e.created_at).toDateString() === todayStr
+    (e) => (e.user_id === user_id || e.user_id === String(user_id).replace(/^usr-/, '')) && new Date(e.created_at).toDateString() === todayStr
   );
   return todayEntry || null;
 }
