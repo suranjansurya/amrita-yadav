@@ -692,6 +692,81 @@ export async function fetchMoodAnalytics({ dateFilter = 'All Time', userFilter =
   };
 }
 
+export async function fetchUser360Profile(userId = 'amritayadav') {
+  const cleanId = String(userId).replace(/^usr-/, '').toLowerCase();
+
+  const [allResponses, allActivities, allHeart, allAuditLogs, moodAnalytics] = await Promise.all([
+    fetchAllUserResponses('All'),
+    fetchUserActivityTimeline(userId, 'All'),
+    fetchUserHeartHistory(userId),
+    fetchAdminAuditLogs(),
+    fetchMoodAnalytics({ dateFilter: 'All Time', userFilter: userId }),
+  ]);
+
+  const userResponses = (allResponses || []).filter(
+    (r) => String(r.user_id || '').replace(/^usr-/, '').toLowerCase() === cleanId
+  );
+
+  const userActivities = (allActivities || []).filter(
+    (a) => String(a.user_id || '').replace(/^usr-/, '').toLowerCase() === cleanId
+  );
+
+  const userAuditLogs = (allAuditLogs || []).filter(
+    (l) => String(l.target_user_id || '').replace(/^usr-/, '').toLowerCase() === cleanId
+  );
+
+  const featureUsage = {
+    '💌 Just For You': 0,
+    '🌌 Constellation Sky': 0,
+    '🤗 Digital Hug': 0,
+    '🎁 Surprise Me': 0,
+    '🫙 Memory Jar': 0,
+    '💗 Memory Timeline': 0,
+    '🌸 Daily Moods': 0,
+    '📖 Journal': 0,
+  };
+
+  userActivities.forEach((act) => {
+    const title = String(act.title || '').toLowerCase();
+    const type = String(act.event_type || '').toLowerCase();
+
+    if (title.includes('just for you') || type.includes('justforyou')) featureUsage['💌 Just For You'] += 1;
+    else if (title.includes('star') || title.includes('sky') || type.includes('star')) featureUsage['🌌 Constellation Sky'] += 1;
+    else if (title.includes('hug') || type.includes('hug')) featureUsage['🤗 Digital Hug'] += 1;
+    else if (title.includes('surprise') || type.includes('surprise')) featureUsage['🎁 Surprise Me'] += 1;
+    else if (title.includes('jar') || type.includes('jar')) featureUsage['🫙 Memory Jar'] += 1;
+    else if (title.includes('memory') || title.includes('timeline')) featureUsage['💗 Memory Timeline'] += 1;
+    else if (title.includes('mood') || type.includes('mood')) featureUsage['🌸 Daily Moods'] += 1;
+    else if (title.includes('journal') || type.includes('journal')) featureUsage['📖 Journal'] += 1;
+  });
+
+  const activeDates = Array.from(
+    new Set(userActivities.map((a) => new Date(a.created_at || Date.now()).toDateString()))
+  );
+
+  const usedFeaturesCount = Object.values(featureUsage).filter((v) => v > 0).length;
+  const lastActiveTime = userActivities.length > 0 ? userActivities[0].created_at : null;
+
+  return {
+    userId: cleanId,
+    responses: userResponses,
+    activities: userActivities,
+    checkIns: allHeart || [],
+    auditLogs: userAuditLogs,
+    moodAnalytics,
+    featureUsage,
+    stats: {
+      totalCheckIns: (allHeart || []).length,
+      streak: moodAnalytics.streak || 0,
+      activeDays: activeDates.length,
+      totalAnswers: userResponses.length,
+      totalActivities: userActivities.length,
+      featuresUsedCount: usedFeaturesCount,
+      lastActive: lastActiveTime,
+    },
+  };
+}
+
 export async function fetchMemories({ includeHidden = false } = {}) {
   let records = [];
 
