@@ -8,6 +8,7 @@ export function SidebarNav({ currentUser, onOpenFeature, onLogout }) {
 
   const NAV_ITEMS = [
     { id: 'justforyou', label: 'Just For You', icon: '💌', color: 'from-rose-400 to-pink-500' },
+    { id: 'memorywall', label: 'Photo & Memory Wall', icon: '🖼️', color: 'from-pink-400 to-rose-500' },
     { id: 'sky', label: 'Constellation Sky', icon: '🌌', color: 'from-indigo-400 to-purple-500' },
     { id: 'secrets', label: 'Secrets', icon: '🔐', color: 'from-amber-400 to-pink-500' },
     { id: 'hug', label: 'Digital Hug', icon: '🤗', color: 'from-pink-400 to-rose-400' },

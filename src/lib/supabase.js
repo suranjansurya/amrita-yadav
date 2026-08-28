@@ -1104,8 +1104,9 @@ export async function fetchUser360Profile(userId = 'amritayadav') {
   };
 }
 
-export async function fetchMemories({ includeHidden = false } = {}) {
+export async function fetchMemories({ user_id = 'usr-amritayadav', includeHidden = false } = {}) {
   let records = [];
+  const cleanUser = String(user_id).replace(/^usr-/, '').toLowerCase();
 
   if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
     try {
@@ -1128,21 +1129,32 @@ export async function fetchMemories({ includeHidden = false } = {}) {
     records = includeHidden ? local : local.filter((m) => m.is_visible !== false);
   }
 
+  // Filter user-specific access: assigned to 'All' OR assigned specifically to this user
+  if (!includeHidden) {
+    records = records.filter((m) => {
+      if (!m.target_user_id || m.target_user_id === 'All' || m.target_user_id === 'all') return true;
+      const cleanTarget = String(m.target_user_id).replace(/^usr-/, '').toLowerCase();
+      return cleanTarget === cleanUser;
+    });
+  }
+
   return records;
 }
 
 export async function saveMemory(memoryData) {
   const now = new Date();
   const id = memoryData.id || `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const isNew = !memoryData.id;
   
   const record = {
     id,
     title: memoryData.title.trim(),
     memory_date: memoryData.memory_date || now.toISOString().split('T')[0],
-    category: memoryData.category || '❤️ Special',
-    short_description: memoryData.short_description.trim(),
-    full_description: (memoryData.full_description || '').trim(),
+    category: memoryData.category || '💗 Special',
+    short_description: (memoryData.short_description || '').trim(),
+    full_description: (memoryData.full_description || memoryData.short_description || '').trim(),
     image_url: (memoryData.image_url || '').trim(),
+    target_user_id: memoryData.target_user_id || 'All',
     is_visible: memoryData.is_visible !== false,
     created_at: memoryData.created_at || now.toISOString(),
     updated_at: now.toISOString(),
@@ -1169,11 +1181,20 @@ export async function saveMemory(memoryData) {
     }
   }
 
+  // Audit log for Admin Memory Management
+  saveAdminAuditLog({
+    action: isNew ? 'MEMORY_CREATED' : 'MEMORY_UPDATED',
+    target_user_id: record.target_user_id,
+    details: `${isNew ? 'Created' : 'Updated'} memory '${record.title}' in category '${record.category}'`,
+    status: 'Success',
+  });
+
   return record;
 }
 
 export async function deleteMemory(memoryId) {
   const local = JSON.parse(localStorage.getItem('amrita_memories_data') || '[]');
+  const targetMemory = local.find((m) => m.id === memoryId);
   const updated = local.filter((m) => m.id !== memoryId);
   localStorage.setItem('amrita_memories_data', JSON.stringify(updated));
 
@@ -1184,6 +1205,13 @@ export async function deleteMemory(memoryId) {
       console.warn('[Supabase] Memory delete exception:', e);
     }
   }
+
+  saveAdminAuditLog({
+    action: 'MEMORY_DELETED',
+    target_user_id: targetMemory?.target_user_id || 'All',
+    details: `Deleted memory '${targetMemory?.title || memoryId}' permanently`,
+    status: 'Success',
+  });
 }
 
 export async function toggleMemoryVisibility(memoryId) {
@@ -1200,7 +1228,69 @@ export async function toggleMemoryVisibility(memoryId) {
         console.warn('[Supabase] Visibility update exception:', e);
       }
     }
+
+    saveAdminAuditLog({
+      action: item.is_visible ? 'MEMORY_PUBLISHED' : 'MEMORY_UNPUBLISHED',
+      target_user_id: item.target_user_id || 'All',
+      details: `${item.is_visible ? 'Published' : 'Unpublished'} memory '${item.title}'`,
+      status: 'Success',
+    });
   }
+}
+
+export async function fetchUserFavorites(user_id = 'usr-amritayadav') {
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+  const localFavs = JSON.parse(
+    localStorage.getItem(`amrita_user_favorites_${cleanId}`) || '[]'
+  );
+  return localFavs;
+}
+
+export async function toggleMemoryFavorite(user_id = 'usr-amritayadav', memoryId) {
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+  const localFavs = JSON.parse(
+    localStorage.getItem(`amrita_user_favorites_${cleanId}`) || '[]'
+  );
+
+  let isFavorited = false;
+  let updatedFavs;
+
+  if (localFavs.includes(memoryId)) {
+    updatedFavs = localFavs.filter((id) => id !== memoryId);
+    isFavorited = false;
+  } else {
+    updatedFavs = [...localFavs, memoryId];
+    isFavorited = true;
+  }
+
+  localStorage.setItem(`amrita_user_favorites_${cleanId}`, JSON.stringify(updatedFavs));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      if (isFavorited) {
+        await supabase.from('user_favorites').upsert([
+          { user_id: cleanId, memory_id: memoryId, created_at: new Date().toISOString() },
+        ]);
+      } else {
+        await supabase
+          .from('user_favorites')
+          .delete()
+          .eq('user_id', cleanId)
+          .eq('memory_id', memoryId);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Favorites sync exception:', e);
+    }
+  }
+
+  saveUserActivity({
+    event_type: isFavorited ? 'memory_favorited' : 'memory_unfavorited',
+    title: isFavorited ? '❤️ Favorited Memory' : '🤍 Unfavorited Memory',
+    description: `Memory ID: ${memoryId}`,
+    user_id,
+  });
+
+  return updatedFavs;
 }
 
 export async function fetchJarMemories({ includeInactive = false } = {}) {

@@ -85,6 +85,8 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Image as ImageIcon,
+  Trophy,
 } from 'lucide-react';
 
 export function AdminDashboard({ onExit }) {
@@ -93,7 +95,7 @@ export function AdminDashboard({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics' | 'activity' | 'audit' | 'answers' | 'users' | 'justforyou'
+  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics' | 'activity' | 'memories' | 'audit' | 'answers' | 'users' | 'justforyou'
   const [filter, setFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time'); // 'All Time' | 'Today' | 'Last 7 Days' | 'Last 30 Days'
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +116,7 @@ export function AdminDashboard({ onExit }) {
   const [adminAuditLogs, setAdminAuditLogs] = useState([]);
   const [userAnswersList, setUserAnswersList] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [memoriesList, setMemoriesList] = useState([]);
   const [dailyMsgsList, setDailyMsgsList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [successNotice, setSuccessNotice] = useState('');
@@ -144,6 +147,19 @@ export function AdminDashboard({ onExit }) {
   const [deletingUserTarget, setDeletingUserTarget] = useState(null);
   const [deletingResponseTarget, setDeletingResponseTarget] = useState(null);
 
+  // Memory Management Modal states
+  const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
+  const [editingMemory, setEditingMemory] = useState(null);
+  const [memTitle, setMemTitle] = useState('');
+  const [memCategory, setMemCategory] = useState('💗 Special');
+  const [memShortDesc, setMemShortDesc] = useState('');
+  const [memFullDesc, setMemFullDesc] = useState('');
+  const [memImageUrl, setMemImageUrl] = useState('');
+  const [memTargetUser, setMemTargetUser] = useState('All');
+  const [memDate, setMemDate] = useState('');
+  const [memIsVisible, setMemIsVisible] = useState(true);
+  const [deletingMemoryTarget, setDeletingMemoryTarget] = useState(null);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadDashboardData();
@@ -164,17 +180,19 @@ export function AdminDashboard({ onExit }) {
       const managedUsers = fetchManagedUsers();
       setUsersList(managedUsers);
 
-      const [rData, actData, auditData, analyticsData] = await Promise.all([
+      const [rData, actData, auditData, analyticsData, mems] = await Promise.all([
         fetchAllUserResponses('All'),
         fetchUserActivityTimeline('usr-amritayadav', 'All'),
         fetchAdminAuditLogs(),
         fetchMoodAnalytics({ dateFilter, userFilter: selectedUserFilter }),
+        fetchMemories({ includeHidden: true }),
       ]);
       
       setUserAnswersList(rData || []);
       setActivityTimeline(actData || []);
       setAdminAuditLogs(auditData || []);
       setMoodAnalyticsData(analyticsData);
+      setMemoriesList(mems || []);
 
       if (activeTab === 'justforyou') {
         const dData = await fetchDailyMessages({ includeInactive: true });
@@ -224,6 +242,7 @@ export function AdminDashboard({ onExit }) {
     setAdminAuditLogs([]);
     setUserAnswersList([]);
     setUsersList([]);
+    setMemoriesList([]);
     if (onExit) onExit();
   };
 
@@ -255,6 +274,68 @@ export function AdminDashboard({ onExit }) {
       loadDashboardData();
     } catch (err) {
       setCreateUserError(err.message);
+    }
+  };
+
+  // Memory Submit Handler (Add / Edit)
+  const handleSaveMemorySubmit = async (e) => {
+    e.preventDefault();
+    if (!memTitle.trim()) return;
+
+    try {
+      await saveMemory({
+        id: editingMemory?.id,
+        title: memTitle,
+        category: memCategory,
+        short_description: memShortDesc,
+        full_description: memFullDesc,
+        image_url: memImageUrl,
+        target_user_id: memTargetUser,
+        memory_date: memDate || new Date().toISOString().split('T')[0],
+        is_visible: memIsVisible,
+      });
+
+      setSuccessNotice(`Memory ${editingMemory ? 'updated' : 'created'} successfully ✓`);
+      setTimeout(() => setSuccessNotice(''), 3000);
+
+      setIsMemoryModalOpen(false);
+      setEditingMemory(null);
+      setMemTitle('');
+      setMemShortDesc('');
+      setMemFullDesc('');
+      setMemImageUrl('');
+      setMemTargetUser('All');
+      setMemDate('');
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Memory save error:', err);
+    }
+  };
+
+  // Memory Delete Handler
+  const handleConfirmDeleteMemory = async () => {
+    if (!deletingMemoryTarget) return;
+    try {
+      await deleteMemory(deletingMemoryTarget.id);
+      setSuccessNotice('Memory deleted permanently ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Delete memory error:', err);
+    } finally {
+      setDeletingMemoryTarget(null);
+    }
+  };
+
+  // Memory Toggle Visibility (Publish / Unpublish)
+  const handleToggleMemoryVisibility = async (memId) => {
+    try {
+      await toggleMemoryVisibility(memId);
+      setSuccessNotice('Memory visibility toggled ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Toggle visibility error:', err);
     }
   };
 
@@ -455,12 +536,16 @@ export function AdminDashboard({ onExit }) {
     );
   });
 
-  const isUserActiveNow = (uId) => {
-    const userActs = activityTimeline.filter((a) => a.user_id === uId);
-    if (userActs.length === 0) return false;
-    const latest = new Date(userActs[0].created_at || Date.now()).getTime();
-    return Date.now() - latest < 5 * 60 * 1000;
-  };
+  const filteredMemories = memoriesList.filter((m) => {
+    if (selectedUserFilter !== 'All' && m.target_user_id !== 'All' && m.target_user_id !== selectedUserFilter) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (m.title && m.title.toLowerCase().includes(q)) ||
+      (m.category && m.category.toLowerCase().includes(q)) ||
+      (m.short_description && m.short_description.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="min-h-screen bg-pink-50/50 text-pink-950 font-body p-4 sm:p-8 select-none overflow-x-hidden">
@@ -477,7 +562,7 @@ export function AdminDashboard({ onExit }) {
                 Admin Control Center
               </h1>
               <p className="text-xs text-pink-700 font-semibold">
-                User 360° Profile, Mood Analytics & System Management
+                Photo & Memory Wall, User 360° Profile & System Management
               </p>
             </div>
           </div>
@@ -517,7 +602,7 @@ export function AdminDashboard({ onExit }) {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search user, mood, question..."
+              placeholder="Search user, memory, question..."
               className="w-full pl-9 pr-4 py-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-300"
             />
             <Search size={14} className="absolute left-3 top-3 text-pink-400" />
@@ -581,6 +666,16 @@ export function AdminDashboard({ onExit }) {
           </button>
 
           <button
+            onClick={() => setActiveTab('memories')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'memories' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <ImageIcon size={15} />
+            <span>🖼️ Memory Management ({filteredMemories.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('audit')}
             className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
               activeTab === 'audit' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
@@ -620,120 +715,30 @@ export function AdminDashboard({ onExit }) {
                 <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950 truncate">
                   {moodAnalyticsData.currentMood}
                 </div>
-                <span className="text-[10px] font-semibold text-pink-500 block">Latest daily check-in</span>
               </div>
-
               <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
                 <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Today's Check-in</span>
                 <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
                   {moodAnalyticsData.isTodayCompleted ? 'Completed ✅' : 'Pending ⏳'}
                 </div>
-                <span className="text-[10px] font-semibold text-pink-500 block">Daily 5-question status</span>
               </div>
-
               <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
                 <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Most Common</span>
                 <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950 truncate">
                   {moodAnalyticsData.mostCommonMood}
                 </div>
-                <span className="text-[10px] font-semibold text-pink-500 block">Highest frequency mood</span>
               </div>
-
               <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
                 <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Current Streak</span>
                 <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
                   🔥 {moodAnalyticsData.streak} Days
                 </div>
-                <span className="text-[10px] font-semibold text-pink-500 block">Consecutive check-in days</span>
               </div>
-
               <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
                 <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Total Check-ins</span>
                 <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
                   {moodAnalyticsData.totalCheckIns}
                 </div>
-                <span className="text-[10px] font-semibold text-pink-500 block">Filtered check-in entries</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4 text-left">
-                <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-                  <h3 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
-                    <BarChart3 size={18} className="text-pink-500" />
-                    <span>MOOD FREQUENCY DISTRIBUTION</span>
-                  </h3>
-                  <span className="text-xs font-bold text-pink-600">
-                    Total: {moodAnalyticsData.totalCheckIns}
-                  </span>
-                </div>
-
-                <div className="space-y-3.5">
-                  {Object.entries(moodAnalyticsData.distribution).map(([moodKey, count]) => {
-                    const pct = moodAnalyticsData.totalCheckIns > 0
-                      ? Math.round((count / moodAnalyticsData.totalCheckIns) * 100)
-                      : 0;
-
-                    return (
-                      <div key={moodKey} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs font-bold text-pink-950">
-                          <span className="flex items-center space-x-1.5">
-                            <span>{moodKey}</span>
-                          </span>
-                          <span className="text-pink-700">
-                            {count} times ({pct}%)
-                          </span>
-                        </div>
-
-                        <div className="w-full h-3 rounded-full bg-pink-100/70 overflow-hidden p-0.5">
-                          <div
-                            style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
-                            className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500 transition-all duration-500 shadow-sm"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4 text-left">
-                <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-                  <h3 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
-                    <Activity size={18} className="text-pink-500" />
-                    <span>MOOD TREND OVER TIME</span>
-                  </h3>
-                  <span className="text-xs font-bold text-pink-600">
-                    {dateFilter}
-                  </span>
-                </div>
-
-                {moodAnalyticsData.trendSeries.length === 0 ? (
-                  <div className="py-12 text-center text-pink-600 font-semibold text-xs">
-                    No mood trend data recorded for selected filters.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="h-44 flex items-end justify-between gap-2 overflow-x-auto pb-2 pt-4 px-2 scrollbar-thin">
-                      {moodAnalyticsData.trendSeries.slice(-14).map((pt) => {
-                        const heightPct = (pt.score / 5) * 100;
-                        return (
-                          <div key={pt.id || pt.date} className="flex flex-col items-center gap-1.5 flex-1 min-w-[36px] group">
-                            <span className="text-[11px] group-hover:scale-125 transition-transform">{pt.mood.split(' ')[0]}</span>
-                            <div className="w-full max-w-[28px] bg-pink-100 rounded-t-xl h-28 flex items-end justify-center p-1">
-                              <div
-                                style={{ height: `${heightPct}%` }}
-                                className="w-full rounded-t-lg bg-gradient-to-t from-pink-500 to-rose-400 group-hover:from-pink-600 group-hover:to-rose-500 transition-all shadow-sm"
-                                title={`${pt.date}: ${pt.mood}`}
-                              />
-                            </div>
-                            <span className="text-[9px] font-bold text-pink-700 truncate w-full text-center">{pt.date}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -742,295 +747,190 @@ export function AdminDashboard({ onExit }) {
         {/* Tab 1: 📊 LIVE USER ACTIVITY */}
         {activeTab === 'activity' && (
           <div className="space-y-6">
-            <div className="glass-panel p-4 rounded-2xl bg-white border border-pink-200 shadow-sm flex items-center justify-between flex-wrap gap-2">
-              <span className="text-xs font-bold text-pink-900">Activity Category Filter:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {['All', 'onboarding', 'login', 'daily_question_answered', 'daily_checkin_completed', 'mood_checkin', 'journal_created', 'hug_sent', 'star_discovered'].map((fKey) => (
-                  <button
-                    key={fKey}
-                    onClick={() => setFilter(fKey)}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                      filter === fKey ? 'bg-pink-500 text-white shadow-sm' : 'bg-pink-50 text-pink-800 hover:bg-pink-100'
-                    }`}
-                  >
-                    {fKey === 'onboarding' ? '📋 5 Login Answers' : fKey.replace(/_/g, ' ')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-                <h3 className="font-heading font-extrabold text-lg text-pink-950 flex items-center space-x-2">
-                  <Activity size={18} className="text-pink-500" />
-                  <span>📊 LIVE USER ACTIVITY TIMELINE</span>
-                </h3>
-              </div>
-
-              {filteredActivity.length === 0 ? (
-                <div className="py-12 text-center text-pink-600 font-semibold text-sm">
-                  No user activity recorded yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredActivity.map((act) => (
-                    <div
-                      key={act.id}
-                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-1.5 hover:bg-pink-50 transition-colors text-left"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-heading font-extrabold text-pink-950">
-                          👤 @{act.user_id || 'amritayadav'}
-                        </span>
-                        <span className="text-[11px] font-bold text-pink-600 flex items-center space-x-1">
-                          <Clock size={12} />
-                          <span>{act.time}</span>
-                        </span>
-                      </div>
-
-                      <div className="font-heading font-bold text-sm text-pink-900 pt-0.5">
-                        {act.title}
-                      </div>
-
-                      {act.metadata?.question && (
-                        <p className="text-xs font-bold text-pink-900">
-                          ❓ Question: <span className="font-normal italic">"{act.metadata.question}"</span>
-                        </p>
-                      )}
-
-                      {act.metadata?.answer && (
-                        <p className="text-xs font-bold text-pink-950 bg-white p-2.5 rounded-xl border border-pink-100">
-                          💬 Answer: <span className="font-normal italic text-rose-900">"{act.metadata.answer}"</span>
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: 👑 ADMIN AUDIT LOGS */}
-        {activeTab === 'audit' && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-pink-100 shadow-sm text-left">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck size={20} className="text-pink-600" />
-                <h3 className="font-heading font-extrabold text-lg text-pink-950">
-                  Admin User-Management Audit Trail ({filteredAuditLogs.length})
-                </h3>
-              </div>
-            </div>
-
-            {filteredAuditLogs.length === 0 ? (
-              <div className="glass-panel p-12 text-center text-pink-700 font-bold text-sm bg-white/80 rounded-3xl">
-                No admin audit events found. 👑
-              </div>
-            ) : (
+              <h3 className="font-heading font-extrabold text-lg text-pink-950 flex items-center space-x-2">
+                <Activity size={18} className="text-pink-500" />
+                <span>📊 LIVE USER ACTIVITY TIMELINE</span>
+              </h3>
               <div className="space-y-3">
-                {filteredAuditLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="p-5 rounded-2xl bg-white border border-pink-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                  >
-                    <div className="flex items-start space-x-3.5">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5 bg-pink-500">
-                        <ShieldCheck size={18} />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-heading font-extrabold text-sm text-pink-950">
-                            {log.action}
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
-                            {log.status || 'Success'}
-                          </span>
-                        </div>
-
-                        <p className="text-xs font-bold text-pink-900">
-                          Target User: <span className="text-pink-700 font-extrabold">@{log.target_user_id}</span>
-                        </p>
-
-                        <p className="text-xs text-pink-700 font-medium">
-                          {log.details}
-                        </p>
-                      </div>
+                {filteredActivity.map((act) => (
+                  <div key={act.id} className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 text-left">
+                    <div className="flex items-center justify-between text-xs font-bold text-pink-950">
+                      <span>👤 @{act.user_id || 'amritayadav'}</span>
+                      <span className="text-pink-600">{act.time}</span>
                     </div>
+                    <p className="font-heading font-bold text-sm text-pink-900 pt-1">{act.title}</p>
+                    {act.description && <p className="text-xs text-pink-700 italic">{act.description}</p>}
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab 3: 💬 ALL USER RESPONSES */}
-        {activeTab === 'answers' && (
-          <div className="space-y-6">
-            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <h3 className="font-heading font-bold text-lg text-pink-950">
-                  💬 ALL USER RESPONSES ({filteredAnswers.length})
-                </h3>
-              </div>
-
-              <button
-                onClick={handleExportCSV}
-                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1.5"
-              >
-                <Download size={15} />
-                <span>📥 Export Responses</span>
-              </button>
-            </div>
-
-            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-              {filteredAnswers.length === 0 ? (
-                <div className="py-12 text-center text-pink-600 font-semibold text-sm">
-                  No user responses found.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {filteredAnswers.map((ans) => (
-                    <div
-                      key={ans.id}
-                      className="p-5 rounded-2xl bg-pink-50/60 border border-pink-100 space-y-3 flex flex-col justify-between text-left"
-                    >
-                      <div className="space-y-2">
-                        <p className="text-xs font-bold text-pink-900">
-                          ❓ Question: <span className="font-semibold italic text-pink-950">"{ans.question || 'User Prompt'}"</span>
-                        </p>
-                        <p className="text-xs font-bold text-pink-950 bg-white p-3 rounded-xl border border-pink-100">
-                          💬 Answer: <span className="font-semibold italic text-rose-900">"{ans.answer || ans.text}"</span>
-                        </p>
-                      </div>
-
-                      <div className="pt-2 border-t border-pink-100 flex items-center justify-between text-xs">
-                        <span className="text-pink-600 font-bold">User: @{ans.user_id}</span>
-                        <button
-                          onClick={() => setDeletingResponseTarget(ans)}
-                          className="px-3 py-1 rounded-xl bg-rose-100 text-rose-700 font-bold hover:bg-rose-200 transition-colors flex items-center space-x-1"
-                        >
-                          <Trash2 size={13} />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* Tab 4: 👥 USER MANAGEMENT (OPEN USER 360° PROFILE ON CLICK) */}
-        {activeTab === 'users' && (
+        {/* Tab 2: 🖼️ MEMORY MANAGEMENT */}
+        {activeTab === 'memories' && (
           <div className="space-y-6">
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <h3 className="font-heading font-bold text-lg text-pink-950">
-                  👥 USER MANAGEMENT ({usersList.length} accounts)
+                <h3 className="font-heading font-extrabold text-lg text-pink-950">
+                  🖼️ MEMORY MANAGEMENT ({filteredMemories.length} items)
                 </h3>
-                <p className="text-xs text-pink-700">Click any user to view their complete 360° Profile & Engagement</p>
+                <p className="text-xs text-pink-700">Add, edit, publish/unpublish, and manage Memory Wall items</p>
               </div>
 
               <button
                 onClick={() => {
-                  setCreateUserError('');
-                  setIsCreateUserModalOpen(true);
+                  setEditingMemory(null);
+                  setMemTitle('');
+                  setMemCategory('💗 Special');
+                  setMemShortDesc('');
+                  setMemFullDesc('');
+                  setMemImageUrl('');
+                  setMemTargetUser('All');
+                  setMemDate(new Date().toISOString().split('T')[0]);
+                  setMemIsVisible(true);
+                  setIsMemoryModalOpen(true);
                 }}
                 className="px-5 py-2.5 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1.5 cursor-pointer"
               >
-                <UserPlus size={16} />
-                <span>+ CREATE USER</span>
+                <PlusCircle size={16} />
+                <span>+ ADD MEMORY</span>
               </button>
             </div>
 
-            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredMemories.map((mem) => (
+                <div key={mem.id} className="p-5 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-3 flex flex-col justify-between text-left">
+                  <div className="space-y-2">
+                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-pink-100">
+                      <img
+                        src={mem.image_url || 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=800&q=80'}
+                        alt={mem.title}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className={`absolute top-2 right-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        mem.is_visible ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {mem.is_visible ? '🟢 Published' : '🔴 Hidden'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-bold text-pink-600">
+                      <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-800">{mem.category}</span>
+                      <span>Target: @{mem.target_user_id || 'All'}</span>
+                    </div>
+
+                    <h4 className="font-heading font-extrabold text-base text-pink-950">{mem.title}</h4>
+                    <p className="text-xs text-pink-800 italic line-clamp-2">"{mem.short_description || mem.full_description}"</p>
+                  </div>
+
+                  <div className="pt-3 border-t border-pink-100 flex items-center justify-between text-xs font-bold">
+                    <button
+                      onClick={() => handleToggleMemoryVisibility(mem.id)}
+                      className={`px-3 py-1 rounded-xl font-bold text-[11px] ${
+                        mem.is_visible ? 'bg-rose-100 text-rose-800 hover:bg-rose-200' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                      }`}
+                    >
+                      {mem.is_visible ? '🔴 Unpublish' : '🟢 Publish'}
+                    </button>
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingMemory(mem);
+                          setMemTitle(mem.title || '');
+                          setMemCategory(mem.category || '💗 Special');
+                          setMemShortDesc(mem.short_description || '');
+                          setMemFullDesc(mem.full_description || '');
+                          setMemImageUrl(mem.image_url || '');
+                          setMemTargetUser(mem.target_user_id || 'All');
+                          setMemDate(mem.memory_date || '');
+                          setMemIsVisible(mem.is_visible !== false);
+                          setIsMemoryModalOpen(true);
+                        }}
+                        className="px-3 py-1 rounded-xl bg-pink-100 text-pink-900 font-bold hover:bg-pink-200"
+                      >
+                        ✏️ Edit
+                      </button>
+
+                      <button
+                        onClick={() => setDeletingMemoryTarget(mem)}
+                        className="px-3 py-1 rounded-xl bg-rose-100 text-rose-700 font-bold hover:bg-rose-200"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: 👑 ADMIN AUDIT LOGS */}
+        {activeTab === 'audit' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-pink-100 shadow-sm text-left">
+              <h3 className="font-heading font-extrabold text-lg text-pink-950">
+                Admin User-Management Audit Trail ({filteredAuditLogs.length})
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {filteredAuditLogs.map((log) => (
+                <div key={log.id} className="p-4 rounded-2xl bg-white border border-pink-200 text-left">
+                  <span className="font-bold text-pink-950 text-sm">{log.action}</span>
+                  <p className="text-xs text-pink-700">{log.details}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: 💬 ALL USER RESPONSES */}
+        {activeTab === 'answers' && (
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex items-center justify-between">
+              <h3 className="font-heading font-bold text-lg text-pink-950">
+                💬 ALL USER RESPONSES ({filteredAnswers.length})
+              </h3>
+              <button onClick={handleExportCSV} className="px-4 py-2 rounded-full bg-pink-500 text-white font-bold text-xs uppercase">
+                📥 Export Responses
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 5: 👥 USER MANAGEMENT */}
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex items-center justify-between">
+              <h3 className="font-heading font-bold text-lg text-pink-950">
+                👥 USER MANAGEMENT ({usersList.length} accounts)
+              </h3>
+              <button onClick={() => setIsCreateUserModalOpen(true)} className="px-4 py-2 rounded-full bg-pink-500 text-white font-bold text-xs uppercase">
+                + CREATE USER
+              </button>
+            </div>
+
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 overflow-x-auto">
+              <table className="w-full text-left min-w-[600px]">
                 <thead>
-                  <tr className="border-b border-pink-100 text-[11px] font-bold text-pink-700 uppercase tracking-wider">
+                  <tr className="border-b border-pink-100 text-[11px] font-bold text-pink-700 uppercase">
                     <th className="py-3 px-4">User</th>
-                    <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Created Date</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-pink-50 text-xs font-semibold">
+                <tbody>
                   {filteredUsers.map((u) => (
-                    <tr key={u.id || u.userId} className="hover:bg-pink-50/50 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <button
-                          onClick={() => setSelectedProfileUser(u)}
-                          className="font-bold text-pink-950 hover:text-pink-600 underline text-left focus:outline-none flex items-center space-x-2"
-                        >
-                          <span className="w-7 h-7 rounded-full bg-pink-100 text-pink-700 flex items-center justify-center text-xs">👤</span>
-                          <span>{u.displayName || u.userId} (@{u.userId})</span>
-                        </button>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 text-[11px] font-bold uppercase">
-                          {u.role || 'user'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase ${
-                          u.status === 'disabled' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {u.status || 'active'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-pink-700">
-                        {new Date(u.created_at || Date.now()).toLocaleDateString()}
-                      </td>
-                      <td className="py-3.5 px-4 text-right space-x-1.5">
-                        <button
-                          onClick={() => setSelectedProfileUser(u)}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-[11px] shadow-sm hover:scale-105 transition-all"
-                        >
+                    <tr key={u.userId} className="border-b border-pink-50">
+                      <td className="py-3 px-4 font-bold">{u.displayName || u.userId} (@{u.userId})</td>
+                      <td className="py-3 px-4">{u.status || 'active'}</td>
+                      <td className="py-3 px-4 text-right">
+                        <button onClick={() => setSelectedProfileUser(u)} className="px-3 py-1 rounded-xl bg-pink-100 text-pink-900 font-bold text-xs">
                           View 360° Profile 👤
                         </button>
-
-                        <button
-                          onClick={() => {
-                            setEditingUser(u);
-                            setEditDisplayName(u.displayName || u.userId);
-                            setEditStatus(u.status || 'active');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-pink-100 text-pink-900 font-bold text-[11px] hover:bg-pink-200"
-                        >
-                          ✏️ Edit
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPasswordResetUser(u);
-                            setResetPasswordInput('');
-                            setResetPasswordError('');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px] hover:bg-amber-200"
-                        >
-                          🔑 Reset
-                        </button>
-
-                        <button
-                          onClick={() => handleToggleStatus(u.userId)}
-                          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] ${
-                            u.status === 'disabled' ? 'bg-emerald-100 text-emerald-900' : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {u.status === 'disabled' ? '🟢 Enable' : '🔒 Disable'}
-                        </button>
-
-                        {u.userId.toLowerCase() !== 'amritayadav' && (
-                          <button
-                            onClick={() => setDeletingUserTarget(u)}
-                            className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 font-bold text-[11px]"
-                          >
-                            🗑️ Delete
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}
@@ -1040,596 +940,111 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* =========================================================
-            PHASE 32: USER 360° PROFILE FULL MODAL VIEW
-            ========================================================= */}
-        {selectedProfileUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-pink-950/40 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-5xl w-full bg-white border-2 border-pink-300 shadow-2xl space-y-6 text-left max-h-[92vh] overflow-y-auto">
-              
-              {/* Profile Top Bar */}
-              <div className="flex items-center justify-between border-b border-pink-200 pb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-400 to-rose-400 text-white flex items-center justify-center text-2xl shadow-md">
-                    👤
-                  </div>
-                  <div>
-                    <h2 className="font-heading font-extrabold text-2xl text-pink-950">
-                      User 360° Profile
-                    </h2>
-                    <p className="text-xs text-pink-700 font-semibold">
-                      Complete emotional intelligence, activity timeline & engagement analytics
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setSelectedProfileUser(null)}
-                  className="p-2 rounded-full bg-pink-100 text-pink-900 hover:bg-pink-200 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {isLoading360 || !user360Data ? (
-                <div className="py-16 text-center text-pink-600 font-bold text-sm">
-                  Loading User 360° Profile data... 🌸
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  
-                  {/* 1. Header Information & Quick Admin Action Buttons */}
-                  <div className="p-6 rounded-3xl bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50 border border-pink-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                          {selectedProfileUser.displayName || selectedProfileUser.userId}
-                        </h3>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          selectedProfileUser.status === 'disabled' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {selectedProfileUser.status === 'disabled' ? '🔴 Disabled' : '🟢 Active'}
-                        </span>
-                      </div>
-                      <p className="text-xs font-bold text-pink-700">@{selectedProfileUser.userId}</p>
-
-                      <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-semibold text-pink-900">
-                        <span>📅 Joined: {new Date(selectedProfileUser.created_at || Date.now()).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>⏰ Last Login: {selectedProfileUser.last_login ? new Date(selectedProfileUser.last_login).toLocaleDateString() : 'Active Today'}</span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons inside 360 profile */}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingUser(selectedProfileUser);
-                          setEditDisplayName(selectedProfileUser.displayName || selectedProfileUser.userId);
-                          setEditStatus(selectedProfileUser.status || 'active');
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-white border border-pink-200 text-pink-900 font-bold text-xs hover:bg-pink-100 shadow-2xs"
-                      >
-                        ✏️ Edit Account
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setPasswordResetUser(selectedProfileUser);
-                          setResetPasswordInput('');
-                          setResetPasswordError('');
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-amber-100 border border-amber-200 text-amber-900 font-bold text-xs hover:bg-amber-200 shadow-2xs"
-                      >
-                        🔑 Reset Password
-                      </button>
-
-                      <button
-                        onClick={() => handleToggleStatus(selectedProfileUser.userId)}
-                        className={`px-3.5 py-2 rounded-xl font-bold text-xs shadow-2xs ${
-                          selectedProfileUser.status === 'disabled' ? 'bg-emerald-100 text-emerald-900' : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        {selectedProfileUser.status === 'disabled' ? '🟢 Enable' : '🔒 Disable'}
-                      </button>
-
-                      {selectedProfileUser.userId.toLowerCase() !== 'amritayadav' && (
-                        <button
-                          onClick={() => setDeletingUserTarget(selectedProfileUser)}
-                          className="px-3.5 py-2 rounded-xl bg-rose-100 border border-rose-200 text-rose-900 font-bold text-xs hover:bg-rose-200 shadow-2xs"
-                        >
-                          🗑️ Delete Account
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 2. Quick Statistics Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Check-ins</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">{user360Data.stats.totalCheckIns}</strong>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Streak</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">🔥 {user360Data.stats.streak} Days</strong>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Active Days</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">📅 {user360Data.stats.activeDays}</strong>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Total Answers</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">💬 {user360Data.stats.totalAnswers}</strong>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Activities</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">✨ {user360Data.stats.totalActivities}</strong>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-2xl border border-pink-100 shadow-2xs text-left">
-                      <span className="text-[10px] font-bold text-pink-600 uppercase block">Features Used</span>
-                      <strong className="text-pink-950 text-lg font-heading font-extrabold">🎯 {user360Data.stats.featuresUsedCount} / 8</strong>
-                    </div>
-                  </div>
-
-                  {/* 3. Streak & Achievements Summary Card */}
-                  <div className="p-5 rounded-3xl bg-gradient-to-br from-amber-50 to-pink-50 border border-pink-200 shadow-sm space-y-3">
-                    <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-200/60 pb-2">
-                      <Trophy size={18} className="text-amber-500" />
-                      <span>🔥 STREAK & ACHIEVEMENTS SUMMARY</span>
-                    </h4>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
-                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Current Streak</span>
-                        <strong className="text-pink-950 text-base font-extrabold">🔥 {user360Data.stats.streak} Days</strong>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
-                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Longest Streak</span>
-                        <strong className="text-pink-950 text-base font-extrabold">🏆 {user360Data.stats.longestStreak} Days</strong>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
-                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Total Check-ins</span>
-                        <strong className="text-pink-950 text-base font-extrabold">💗 {user360Data.stats.totalCheckIns}</strong>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-2xl border border-pink-100 shadow-2xs">
-                        <span className="text-[10px] font-bold text-pink-600 uppercase block">Achievements</span>
-                        <strong className="text-pink-950 text-base font-extrabold">🏅 {user360Data.stats.unlockedCount} / {user360Data.stats.totalCount}</strong>
-                      </div>
-                    </div>
-
-                    <div className="pt-1 space-y-1">
-                      <span className="text-xs font-bold text-pink-900 block">Unlocked Badges:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {user360Data.achievementsData?.achievements
-                          ?.filter((a) => a.isUnlocked)
-                          ?.map((a) => (
-                            <span key={a.id} className="px-2.5 py-1 rounded-full bg-white text-pink-950 font-bold text-xs border border-pink-200 shadow-2xs flex items-center space-x-1">
-                              <span>{a.icon}</span>
-                              <span>{a.title}</span>
-                            </span>
-                          ))}
-                        {(!user360Data.achievementsData?.achievements?.some((a) => a.isUnlocked)) && (
-                          <span className="text-xs text-pink-600 italic">No achievements unlocked yet.</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4. Mood Analytics Summary & Feature Usage Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    
-                    {/* Mood Summary Card */}
-                    <div className="p-5 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-3">
-                      <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-100 pb-2">
-                        <Heart size={18} className="fill-pink-500 text-pink-500" />
-                        <span>💗 MOOD SUMMARY</span>
-                      </h4>
-
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="bg-pink-50/60 p-3 rounded-2xl border border-pink-100">
-                          <span className="text-[11px] font-bold text-pink-700 block">Current Mood</span>
-                          <strong className="text-pink-950 text-sm font-extrabold">{user360Data.moodAnalytics.currentMood}</strong>
-                        </div>
-                        <div className="bg-pink-50/60 p-3 rounded-2xl border border-pink-100">
-                          <span className="text-[11px] font-bold text-pink-700 block">Most Common Mood</span>
-                          <strong className="text-pink-950 text-sm font-extrabold">{user360Data.moodAnalytics.mostCommonMood}</strong>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1 pt-1">
-                        <span className="text-xs font-bold text-pink-900 block">Recent Check-in Mood Pattern:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {user360Data.moodAnalytics.trendSeries.slice(-7).map((pt, idx) => (
-                            <span key={idx} className="px-3 py-1 rounded-full bg-pink-100 text-pink-950 font-bold text-xs border border-pink-200">
-                              {pt.mood}
-                            </span>
-                          ))}
-                          {user360Data.moodAnalytics.trendSeries.length === 0 && (
-                            <span className="text-xs text-pink-600 italic">No recent check-ins</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Feature Usage Frequency Card */}
-                    <div className="p-5 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-3">
-                      <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-100 pb-2">
-                        <Sparkles size={18} className="text-pink-500" />
-                        <span>🎯 FEATURE USAGE FREQUENCY</span>
-                      </h4>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {Object.entries(user360Data.featureUsage).map(([featLabel, count]) => (
-                          <div key={featLabel} className="bg-pink-50/50 p-2.5 rounded-xl border border-pink-100 flex items-center justify-between font-semibold text-pink-950">
-                            <span>{featLabel}</span>
-                            <span className="px-2 py-0.5 rounded-full bg-white text-pink-800 font-extrabold text-[11px] border border-pink-200">
-                              {count}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* 4. Complete User Activity Vertical Connected Timeline */}
-                  <div className="p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-pink-100 pb-3">
-                      <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
-                        <Activity size={18} className="text-pink-500" />
-                        <span>COMPLETE USER ACTIVITY TIMELINE ({user360Data.activities.length})</span>
-                      </h4>
-
-                      {/* Filter by Feature */}
-                      <div className="flex items-center space-x-2">
-                        <Filter size={14} className="text-pink-600" />
-                        <span className="text-xs font-bold text-pink-900">Feature:</span>
-                        <select
-                          value={profileFeatureFilter}
-                          onChange={(e) => setProfileFeatureFilter(e.target.value)}
-                          className="p-1.5 rounded-xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
-                        >
-                          <option value="All">All Features</option>
-                          <option value="mood">Daily Moods</option>
-                          <option value="hug">Digital Hugs</option>
-                          <option value="justforyou">Just For You</option>
-                          <option value="star">Constellation Sky</option>
-                          <option value="journal">Journal</option>
-                          <option value="surprise">Surprise Me</option>
-                          <option value="jar">Memory Jar</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {user360Data.activities.length === 0 ? (
-                      <div className="py-12 text-center text-pink-600 font-semibold text-xs">
-                        No activity records found for this user.
-                      </div>
-                    ) : (
-                      <div className="relative border-l-2 border-pink-200 ml-4 pl-6 space-y-6 py-2">
-                        {user360Data.activities
-                          .filter((act) => {
-                            if (profileFeatureFilter === 'All') return true;
-                            const title = String(act.title || '').toLowerCase();
-                            const type = String(act.event_type || '').toLowerCase();
-                            return title.includes(profileFeatureFilter) || type.includes(profileFeatureFilter);
-                          })
-                          .map((act) => (
-                            <div key={act.id || act.created_at} className="relative group">
-                              {/* Connected Timeline Dot */}
-                              <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-pink-500 border-2 border-white shadow-sm group-hover:scale-125 transition-transform" />
-
-                              <div className="p-4 rounded-2xl bg-pink-50/60 border border-pink-100 space-y-1.5 hover:bg-pink-50 transition-colors">
-                                <div className="flex items-center justify-between text-xs text-pink-600 font-bold">
-                                  <span>{act.title}</span>
-                                  <span>📅 {act.date || new Date(act.created_at).toLocaleDateString()} • ⏰ {act.time || new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </div>
-
-                                {act.description && (
-                                  <p className="text-xs font-semibold text-pink-950">
-                                    {act.description}
-                                  </p>
-                                )}
-
-                                {act.metadata?.question && (
-                                  <p className="text-xs font-bold text-pink-900">
-                                    ❓ <span className="font-normal italic">"{act.metadata.question}"</span>
-                                  </p>
-                                )}
-
-                                {act.metadata?.answer && (
-                                  <p className="text-xs font-bold text-rose-900 bg-white p-2 rounded-xl border border-pink-100 italic">
-                                    💬 "{act.metadata.answer}"
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 5. Daily Check-in History Expandable Cards */}
-                  <div className="p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-                    <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-100 pb-3">
-                      <Calendar size={18} className="text-pink-500" />
-                      <span>DAILY CHECK-IN HISTORY ({user360Data.checkIns.length})</span>
-                    </h4>
-
-                    {user360Data.checkIns.length === 0 ? (
-                      <div className="py-8 text-center text-pink-600 font-semibold text-xs">
-                        No daily check-ins recorded for this user yet.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {user360Data.checkIns.map((chk) => {
-                          const isExpanded = expandedCheckInDate === chk.id;
-                          return (
-                            <div key={chk.id || chk.created_at} className="rounded-2xl border border-pink-200 overflow-hidden bg-white">
-                              <button
-                                onClick={() => setExpandedCheckInDate(isExpanded ? null : chk.id)}
-                                className="w-full p-4 bg-pink-50/50 hover:bg-pink-100/60 transition-colors flex items-center justify-between text-xs font-bold text-pink-950 text-left focus:outline-none"
-                              >
-                                <div className="flex items-center space-x-3">
-                                  <span>📅 {chk.date || new Date(chk.created_at).toLocaleDateString()}</span>
-                                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
-                                    ✅ Completed
-                                  </span>
-                                  <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-900 text-[10px] font-extrabold">
-                                    {chk.mood}
-                                  </span>
-                                </div>
-
-                                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                              </button>
-
-                              {isExpanded && (
-                                <div className="p-4 space-y-2 text-xs border-t border-pink-100 bg-white">
-                                  <div className="p-2.5 rounded-xl bg-pink-50/60 font-semibold text-pink-950">
-                                    <strong>Q1 Mood:</strong> {chk.mood}
-                                  </div>
-                                  <div className="p-2.5 rounded-xl bg-pink-50/60 font-semibold text-pink-950">
-                                    <strong>Q2 Day Feeling:</strong> {chk.day_feeling}
-                                  </div>
-                                  <div className="p-2.5 rounded-xl bg-pink-50/60 font-semibold text-pink-950">
-                                    <strong>Q3 Heart Need:</strong> {chk.current_need}
-                                  </div>
-                                  <div className="p-2.5 rounded-xl bg-pink-50/60 font-semibold text-pink-950">
-                                    <strong>Q4 Heart Word:</strong> {chk.heart_word || 'N/A'}
-                                  </div>
-                                  {chk.shared_message && (
-                                    <div className="p-2.5 rounded-xl bg-rose-50 font-semibold text-rose-900 italic border border-rose-100">
-                                      <strong>Q5 Note:</strong> "{chk.shared_message}"
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 6. Admin Audit Log History for this User */}
-                  <div className="p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-                    <h4 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2 border-b border-pink-100 pb-3">
-                      <ShieldCheck size={18} className="text-pink-600" />
-                      <span>ADMIN ACTION HISTORY FOR THIS USER ({user360Data.auditLogs.length})</span>
-                    </h4>
-
-                    {user360Data.auditLogs.length === 0 ? (
-                      <div className="py-8 text-center text-pink-600 font-semibold text-xs">
-                        No admin actions recorded for this user account.
-                      </div>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {user360Data.auditLogs.map((log) => (
-                          <div key={log.id} className="p-3.5 rounded-2xl bg-pink-50/50 border border-pink-100 flex items-center justify-between text-xs">
-                            <div className="space-y-0.5">
-                              <span className="font-bold text-pink-950 block">{log.action}</span>
-                              <span className="text-pink-700 block">{log.details}</span>
-                            </div>
-                            <span className="text-[11px] font-bold text-pink-500">
-                              📅 {log.date || new Date(log.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              )}
-
-              {/* Close Button */}
-              <div className="pt-2 border-t border-pink-200">
-                <button
-                  onClick={() => setSelectedProfileUser(null)}
-                  className="w-full py-3 rounded-full bg-pink-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-pink-600 transition-colors"
-                >
-                  Close User 360° Profile
-                </button>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* Modal 1: Create User Modal */}
-        {isCreateUserModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
+        {/* Modal: Add / Edit Memory */}
+        {isMemoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md text-left">
+            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-lg w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
               <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                + Create New User Account 👤
+                {editingMemory ? '✏️ Edit Memory' : '➕ Add New Memory'}
               </h3>
 
-              <form onSubmit={handleCreateUserSubmit} className="space-y-3.5">
+              <form onSubmit={handleSaveMemorySubmit} className="space-y-3">
                 <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Username *</label>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Title *</label>
                   <input
                     type="text"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    placeholder="e.g. amritayadav"
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                    required
+                    value={memTitle}
+                    onChange={(e) => setMemTitle(e.target.value)}
+                    placeholder="e.g. A Beautiful Walk in the Park"
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Display Name (Optional)</label>
-                  <input
-                    type="text"
-                    value={newDisplayName}
-                    onChange={(e) => setNewDisplayName(e.target.value)}
-                    placeholder="e.g. Amrita Yadav"
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Password (min 8 chars) *</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Confirm Password *</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
-                  />
-                </div>
-
-                {createUserError && (
-                  <p className="text-xs font-bold text-rose-600 animate-bounce">{createUserError}</p>
-                )}
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateUserModalOpen(false)}
-                    className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
-                  >
-                    Create User
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal 2: Edit User Details */}
-        {editingUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
-              <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                ✏️ Edit User Details (@{editingUser.userId})
-              </h3>
-
-              <form onSubmit={handleEditUserSubmit} className="space-y-3.5">
-                <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Display Name</label>
-                  <input
-                    type="text"
-                    value={editDisplayName}
-                    onChange={(e) => setEditDisplayName(e.target.value)}
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Account Status</label>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Category</label>
                   <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                    value={memCategory}
+                    onChange={(e) => setMemCategory(e.target.value)}
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
                   >
-                    <option value="active">Active 🟢</option>
-                    <option value="disabled">Disabled 🔒</option>
+                    {['💗 Special', '🌸 Beautiful Moments', '🎉 Celebration', '✈️ Journey', '😊 Happy', '✨ Favorite'].map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingUser(null)}
-                    className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal 3: Change/Reset Password */}
-        {passwordResetUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
-              <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                🔑 Reset Password for @{passwordResetUser.userId}
-              </h3>
-
-              <form onSubmit={handlePasswordResetSubmit} className="space-y-3.5">
                 <div>
-                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">New Password (min 8 chars) *</label>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Image URL</label>
                   <input
-                    type="password"
-                    value={resetPasswordInput}
-                    onChange={(e) => setResetPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                    type="url"
+                    value={memImageUrl}
+                    onChange={(e) => setMemImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
                   />
                 </div>
 
-                {resetPasswordError && (
-                  <p className="text-xs font-bold text-rose-600 animate-bounce">{resetPasswordError}</p>
-                )}
+                <div>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Target User</label>
+                  <select
+                    value={memTargetUser}
+                    onChange={(e) => setMemTargetUser(e.target.value)}
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
+                  >
+                    <option value="All">All Users 🌐</option>
+                    {usersList.map((u) => (
+                      <option key={u.userId} value={u.userId}>@{u.userId} ({u.displayName || u.userId})</option>
+                    ))}
+                  </select>
+                </div>
 
-                <div className="flex gap-2 pt-2">
+                <div>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Short Caption</label>
+                  <input
+                    type="text"
+                    value={memShortDesc}
+                    onChange={(e) => setMemShortDesc(e.target.value)}
+                    placeholder="Short summary for card view..."
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Full Description</label>
+                  <textarea
+                    rows={3}
+                    value={memFullDesc}
+                    onChange={(e) => setMemFullDesc(e.target.value)}
+                    placeholder="Detailed memory thoughts and story..."
+                    className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-xs font-bold"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="memIsVisible"
+                    checked={memIsVisible}
+                    onChange={(e) => setMemIsVisible(e.target.checked)}
+                    className="w-4 h-4 rounded text-pink-600 focus:ring-pink-400"
+                  />
+                  <label htmlFor="memIsVisible" className="text-xs font-bold text-pink-900">Publish immediately to Memory Wall 🟢</label>
+                </div>
+
+                <div className="flex gap-2 pt-3">
                   <button
                     type="button"
-                    onClick={() => setPasswordResetUser(null)}
-                    className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                    onClick={() => setIsMemoryModalOpen(false)}
+                    className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="w-1/2 py-3 rounded-full bg-gradient-to-r from-amber-400 to-pink-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
+                    className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase shadow-md hover:scale-105"
                   >
-                    Reset Password
+                    {editingMemory ? 'Save Memory' : 'Add Memory'}
                   </button>
                 </div>
               </form>
@@ -1637,34 +1052,34 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Modal 4: Delete User Confirmation */}
-        {deletingUserTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-center">
+        {/* Modal: Confirm Delete Memory */}
+        {deletingMemoryTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md text-center">
+            <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4">
               <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
                 <Trash2 size={28} />
               </div>
 
               <h3 className="font-heading font-extrabold text-xl text-pink-950">
-                Delete User Account @{deletingUserTarget.userId}?
+                Delete this memory permanently?
               </h3>
 
               <p className="text-xs text-pink-700 font-semibold bg-rose-50 p-3 rounded-2xl border border-rose-100">
-                This action will permanently delete user account details. Audit history will be safely preserved.
+                "{deletingMemoryTarget.title}" will be permanently removed from the Memory Wall.
               </p>
 
               <div className="flex gap-2 pt-2">
                 <button
-                  onClick={() => setDeletingUserTarget(null)}
-                  className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                  onClick={() => setDeletingMemoryTarget(null)}
+                  className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleConfirmDeleteUser}
-                  className="w-1/2 py-3 rounded-full bg-rose-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-rose-700 transition-all"
+                  onClick={handleConfirmDeleteMemory}
+                  className="w-1/2 py-3 rounded-full bg-rose-600 text-white font-bold text-xs uppercase shadow-md hover:bg-rose-700"
                 >
-                  Delete Account
+                  Delete
                 </button>
               </div>
             </div>

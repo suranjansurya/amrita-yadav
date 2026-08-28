@@ -32,6 +32,7 @@ import { SecretUnlockModal } from './components/common/SecretUnlockModal';
 import { ConstellationModal } from './components/common/ConstellationModal';
 import { JustForYouModal } from './components/common/JustForYouModal';
 import { MoodCheckInModal } from './components/common/MoodCheckInModal';
+import { MemoryWallModal } from './components/common/MemoryWallModal';
 import { AdminDashboard } from './pages/AdminDashboard';
 
 // Interactive Modules
@@ -131,6 +132,7 @@ export default function App() {
   const [isHeartCheckInDone, setIsHeartCheckInDone] = useState(false);
 
   const [isJustForYouOpen, setIsJustForYouOpen] = useState(false);
+  const [isMemoryWallOpen, setIsMemoryWallOpen] = useState(false);
   const [isConstellationOpen, setIsConstellationOpen] = useState(false);
   const [isSecretUnlockOpen, setIsSecretUnlockOpen] = useState(false);
   const [isDigitalHugOpen, setIsDigitalHugOpen] = useState(false);
@@ -268,6 +270,9 @@ export default function App() {
     switch (id) {
       case 'justforyou':
         setIsJustForYouOpen(true);
+        break;
+      case 'memorywall':
+        setIsMemoryWallOpen(true);
         break;
       case 'sky':
         setIsConstellationOpen(true);
@@ -468,6 +473,13 @@ export default function App() {
         <Section49FinalDedication />
         <Section50FinalControls />
       </main>
+
+      {/* Phase 34: Premium Photo & Memory Wall Modal Overlay */}
+      <MemoryWallModal
+        isOpen={isMemoryWallOpen}
+        onClose={() => setIsMemoryWallOpen(false)}
+        currentUser={currentUser}
+      />
 
       {/* Phase 29: Just For You Modal Overlay */}
       <JustForYouModal
