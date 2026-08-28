@@ -589,6 +589,109 @@ export async function fetchHeartCheckIns(filter = 'All') {
   });
 }
 
+const MOOD_SCORE_MAP = {
+  '😊 Happy': 5,
+  '😌 Peaceful': 4,
+  '😐 Okay': 3,
+  '😴 Tired': 2,
+  '😔 Low': 1,
+};
+
+export async function fetchMoodAnalytics({ dateFilter = 'All Time', userFilter = 'All' } = {}) {
+  const allRecords = await fetchHeartCheckIns('All');
+  const now = new Date();
+
+  let filtered = allRecords.filter((rec) => {
+    if (userFilter === 'All') return true;
+    const cleanFilter = String(userFilter).replace(/^usr-/, '').toLowerCase();
+    const recUser = String(rec.user_id || '').replace(/^usr-/, '').toLowerCase();
+    return recUser === cleanFilter;
+  });
+
+  filtered = filtered.filter((rec) => {
+    if (dateFilter === 'All Time') return true;
+    const recDate = new Date(rec.created_at || Date.now());
+
+    if (dateFilter === 'Today') {
+      return recDate.toDateString() === now.toDateString();
+    }
+
+    if (dateFilter === 'Last 7 Days') {
+      const diffDays = (now - recDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7;
+    }
+
+    if (dateFilter === 'Last 30 Days') {
+      const diffDays = (now - recDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 30;
+    }
+
+    return true;
+  });
+
+  filtered.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+  const currentMood = filtered.length > 0 ? (filtered[0].mood || '😊 Happy') : 'No Check-ins';
+  const todayEntry = filtered.find((r) => new Date(r.created_at || 0).toDateString() === now.toDateString());
+  const isTodayCompleted = Boolean(todayEntry);
+
+  const distribution = {
+    '😊 Happy': 0,
+    '😌 Peaceful': 0,
+    '😐 Okay': 0,
+    '😔 Low': 0,
+    '😴 Tired': 0,
+  };
+
+  filtered.forEach((r) => {
+    if (r.mood && distribution[r.mood] !== undefined) {
+      distribution[r.mood] += 1;
+    } else if (r.mood) {
+      const matchedKey = Object.keys(distribution).find((k) => k.includes(r.mood) || r.mood.includes(k.replace(/^[^\s]+\s*/, '')));
+      if (matchedKey) distribution[matchedKey] += 1;
+      else distribution['😊 Happy'] += 1;
+    }
+  });
+
+  let mostCommonMood = filtered.length > 0 ? '😊 Happy' : 'None';
+  let maxCount = -1;
+  Object.entries(distribution).forEach(([m, count]) => {
+    if (count > maxCount && count > 0) {
+      maxCount = count;
+      mostCommonMood = m;
+    }
+  });
+
+  const uniqueDates = Array.from(new Set(filtered.map((r) => new Date(r.created_at || 0).toDateString())));
+  const streak = uniqueDates.length;
+
+  const trendRecords = [...filtered].reverse();
+  const trendSeries = trendRecords.map((r) => {
+    const d = new Date(r.created_at || Date.now());
+    const score = MOOD_SCORE_MAP[r.mood] || 3;
+    return {
+      id: r.id,
+      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
+      mood: r.mood || '😊 Happy',
+      score,
+      user_id: r.user_id,
+      created_at: r.created_at,
+    };
+  });
+
+  return {
+    totalCheckIns: filtered.length,
+    currentMood,
+    isTodayCompleted,
+    mostCommonMood,
+    streak,
+    distribution,
+    history: filtered,
+    trendSeries,
+  };
+}
+
 export async function fetchMemories({ includeHidden = false } = {}) {
   let records = [];
 

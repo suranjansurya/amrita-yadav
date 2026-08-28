@@ -32,6 +32,7 @@ import {
   fetchUserActivityTimeline,
   exportUserAnswersCSV,
   fetchAdminAuditLogs,
+  fetchMoodAnalytics,
 } from '../lib/supabase';
 import {
   authenticateAdmin,
@@ -88,11 +89,22 @@ export function AdminDashboard({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'audit' | 'answers' | 'users' | 'justforyou'
+  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics' | 'activity' | 'audit' | 'answers' | 'users' | 'justforyou'
   const [filter, setFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('All Time'); // 'All Time' | 'Today' | 'Yesterday' | 'Last 7 Days' | 'Last 30 Days'
+  const [dateFilter, setDateFilter] = useState('All Time'); // 'All Time' | 'Today' | 'Last 7 Days' | 'Last 30 Days'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserFilter, setSelectedUserFilter] = useState('All');
+
+  const [moodAnalyticsData, setMoodAnalyticsData] = useState({
+    totalCheckIns: 0,
+    currentMood: '😊 Happy',
+    isTodayCompleted: false,
+    mostCommonMood: '😊 Happy',
+    streak: 0,
+    distribution: { '😊 Happy': 0, '😌 Peaceful': 0, '😐 Okay': 0, '😔 Low': 0, '😴 Tired': 0 },
+    history: [],
+    trendSeries: [],
+  });
 
   const [activityTimeline, setActivityTimeline] = useState([]);
   const [adminAuditLogs, setAdminAuditLogs] = useState([]);
@@ -136,15 +148,17 @@ export function AdminDashboard({ onExit }) {
       const managedUsers = fetchManagedUsers();
       setUsersList(managedUsers);
 
-      const [rData, actData, auditData] = await Promise.all([
+      const [rData, actData, auditData, analyticsData] = await Promise.all([
         fetchAllUserResponses('All'),
         fetchUserActivityTimeline('usr-amritayadav', 'All'),
         fetchAdminAuditLogs(),
+        fetchMoodAnalytics({ dateFilter, userFilter: selectedUserFilter }),
       ]);
       
       setUserAnswersList(rData || []);
       setActivityTimeline(actData || []);
       setAdminAuditLogs(auditData || []);
+      setMoodAnalyticsData(analyticsData);
 
       if (activeTab === 'justforyou') {
         const dData = await fetchDailyMessages({ includeInactive: true });
@@ -428,7 +442,7 @@ export function AdminDashboard({ onExit }) {
                 Admin Control Center
               </h1>
               <p className="text-xs text-pink-700 font-semibold">
-                Protected User Management, Responses & Live Activity Monitoring
+                Private Mood Analytics, User Management & Live Activity Monitoring
               </p>
             </div>
           </div>
@@ -461,39 +475,68 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Search & User Selection Bar */}
+        {/* Filter Controls Bar (Date Filter & User Filter) */}
         <div className="glass-panel p-4 rounded-2xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-64">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search user, response, question..."
+              placeholder="Search user, mood, question..."
               className="w-full pl-9 pr-4 py-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-300"
             />
             <Search size={14} className="absolute left-3 top-3 text-pink-400" />
           </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
-            <Filter size={14} className="text-pink-600" />
-            <span className="text-xs font-bold text-pink-900">User:</span>
-            <select
-              value={selectedUserFilter}
-              onChange={(e) => setSelectedUserFilter(e.target.value)}
-              className="p-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
-            >
-              <option value="All">All Users ({usersList.length})</option>
-              {usersList.map((u) => (
-                <option key={u.userId} value={u.userId}>
-                  @{u.userId} ({u.displayName || u.userId})
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            {/* Date Filter Dropdown */}
+            <div className="flex items-center space-x-1.5">
+              <Calendar size={14} className="text-pink-600" />
+              <span className="text-xs font-bold text-pink-900">Period:</span>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="p-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
+              >
+                <option value="All Time">All Time</option>
+                <option value="Today">Today</option>
+                <option value="Last 7 Days">Last 7 Days</option>
+                <option value="Last 30 Days">Last 30 Days</option>
+              </select>
+            </div>
+
+            {/* User Filter Dropdown */}
+            <div className="flex items-center space-x-1.5">
+              <Filter size={14} className="text-pink-600" />
+              <span className="text-xs font-bold text-pink-900">User:</span>
+              <select
+                value={selectedUserFilter}
+                onChange={(e) => setSelectedUserFilter(e.target.value)}
+                className="p-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
+              >
+                <option value="All">All Users ({usersList.length})</option>
+                {usersList.map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    @{u.userId} ({u.displayName || u.userId})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Tab Navigation Menu */}
         <div className="flex flex-wrap items-center gap-2 border-b border-pink-200 pb-3">
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'analytics' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <Heart size={15} className="fill-pink-200" />
+            <span>💗 Mood Analytics</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('activity')}
             className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
@@ -534,6 +577,201 @@ export function AdminDashboard({ onExit }) {
             <span>👥 User Management ({usersList.length})</span>
           </button>
         </div>
+
+        {/* Tab 0: 💗 MOOD ANALYTICS DASHBOARD */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* 1. Overview Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+              <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
+                <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Current Mood</span>
+                <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950 truncate">
+                  {moodAnalyticsData.currentMood}
+                </div>
+                <span className="text-[10px] font-semibold text-pink-500 block">Latest daily check-in</span>
+              </div>
+
+              <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
+                <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Today's Check-in</span>
+                <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
+                  {moodAnalyticsData.isTodayCompleted ? 'Completed ✅' : 'Pending ⏳'}
+                </div>
+                <span className="text-[10px] font-semibold text-pink-500 block">Daily 5-question status</span>
+              </div>
+
+              <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
+                <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Most Common</span>
+                <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950 truncate">
+                  {moodAnalyticsData.mostCommonMood}
+                </div>
+                <span className="text-[10px] font-semibold text-pink-500 block">Highest frequency mood</span>
+              </div>
+
+              <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
+                <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Current Streak</span>
+                <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
+                  🔥 {moodAnalyticsData.streak} Days
+                </div>
+                <span className="text-[10px] font-semibold text-pink-500 block">Consecutive check-in days</span>
+              </div>
+
+              <div className="glass-panel p-4 rounded-3xl bg-white border border-pink-200 shadow-sm text-left space-y-1">
+                <span className="text-[11px] font-bold text-pink-600 uppercase tracking-wider block">Total Check-ins</span>
+                <div className="font-heading font-extrabold text-xl sm:text-2xl text-pink-950">
+                  {moodAnalyticsData.totalCheckIns}
+                </div>
+                <span className="text-[10px] font-semibold text-pink-500 block">Filtered check-in entries</span>
+              </div>
+            </div>
+
+            {/* 2. Mood Distribution & Trend Chart Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Mood Frequency Distribution Bar Chart */}
+              <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                  <h3 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
+                    <BarChart3 size={18} className="text-pink-500" />
+                    <span>MOOD FREQUENCY DISTRIBUTION</span>
+                  </h3>
+                  <span className="text-xs font-bold text-pink-600">
+                    Total: {moodAnalyticsData.totalCheckIns}
+                  </span>
+                </div>
+
+                <div className="space-y-3.5">
+                  {Object.entries(moodAnalyticsData.distribution).map(([moodKey, count]) => {
+                    const pct = moodAnalyticsData.totalCheckIns > 0
+                      ? Math.round((count / moodAnalyticsData.totalCheckIns) * 100)
+                      : 0;
+
+                    return (
+                      <div key={moodKey} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-bold text-pink-950">
+                          <span className="flex items-center space-x-1.5">
+                            <span>{moodKey}</span>
+                          </span>
+                          <span className="text-pink-700">
+                            {count} times ({pct}%)
+                          </span>
+                        </div>
+
+                        <div className="w-full h-3 rounded-full bg-pink-100/70 overflow-hidden p-0.5">
+                          <div
+                            style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
+                            className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500 transition-all duration-500 shadow-sm"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Mood Trend Visualization Area */}
+              <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                  <h3 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
+                    <Activity size={18} className="text-pink-500" />
+                    <span>MOOD TREND OVER TIME</span>
+                  </h3>
+                  <span className="text-xs font-bold text-pink-600">
+                    {dateFilter}
+                  </span>
+                </div>
+
+                {moodAnalyticsData.trendSeries.length === 0 ? (
+                  <div className="py-12 text-center text-pink-600 font-semibold text-xs">
+                    No mood trend data recorded for selected filters.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="h-44 flex items-end justify-between gap-2 overflow-x-auto pb-2 pt-4 px-2 scrollbar-thin">
+                      {moodAnalyticsData.trendSeries.slice(-14).map((pt) => {
+                        const heightPct = (pt.score / 5) * 100;
+                        return (
+                          <div key={pt.id || pt.date} className="flex flex-col items-center gap-1.5 flex-1 min-w-[36px] group">
+                            <span className="text-[11px] group-hover:scale-125 transition-transform">{pt.mood.split(' ')[0]}</span>
+                            <div className="w-full max-w-[28px] bg-pink-100 rounded-t-xl h-28 flex items-end justify-center p-1">
+                              <div
+                                style={{ height: `${heightPct}%` }}
+                                className="w-full rounded-t-lg bg-gradient-to-t from-pink-500 to-rose-400 group-hover:from-pink-600 group-hover:to-rose-500 transition-all shadow-sm"
+                                title={`${pt.date}: ${pt.mood}`}
+                              />
+                            </div>
+                            <span className="text-[9px] font-bold text-pink-700 truncate w-full text-center">{pt.date}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-pink-600 font-semibold text-center italic">
+                      Numeric Score Scale: Happy (5) • Peaceful (4) • Okay (3) • Tired (2) • Low (1)
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Chronological Mood History Timeline Table */}
+            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4 text-left">
+              <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                <h3 className="font-heading font-extrabold text-base text-pink-950 flex items-center space-x-2">
+                  <Clock size={18} className="text-pink-500" />
+                  <span>CHRONOLOGICAL MOOD HISTORY ({moodAnalyticsData.history.length})</span>
+                </h3>
+                <span className="text-xs font-bold text-pink-600">Newest First</span>
+              </div>
+
+              {moodAnalyticsData.history.length === 0 ? (
+                <div className="py-12 text-center text-pink-600 font-semibold text-xs">
+                  No mood history records found.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                  {moodAnalyticsData.history.map((item) => (
+                    <div
+                      key={item.id || item.created_at}
+                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-2 hover:bg-pink-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-heading font-extrabold text-pink-950">
+                            👤 @{item.user_id || 'amritayadav'}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 text-[11px] font-bold">
+                            {item.mood}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-bold text-pink-600">
+                          📅 {item.date || new Date(item.created_at).toLocaleDateString()} • ⏰ {item.time || new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                        <div className="bg-white p-2.5 rounded-xl border border-pink-100 font-semibold text-pink-900">
+                          <strong>Day Feeling:</strong> {item.day_feeling || 'N/A'}
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-pink-100 font-semibold text-pink-900">
+                          <strong>Heart Need:</strong> {item.current_need || 'N/A'}
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-pink-100 font-semibold text-pink-900">
+                          <strong>Heart Word:</strong> {item.heart_word || 'N/A'}
+                        </div>
+                      </div>
+
+                      {item.shared_message && (
+                        <p className="text-xs text-rose-900 font-semibold bg-white p-2.5 rounded-xl border border-pink-100 italic">
+                          💬 Note: "{item.shared_message}"
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Tab 1: 📊 LIVE USER ACTIVITY */}
         {activeTab === 'activity' && (
@@ -820,9 +1058,12 @@ export function AdminDashboard({ onExit }) {
                   {filteredUsers.map((u) => (
                     <tr key={u.id || u.userId} className="hover:bg-pink-50/50 transition-colors">
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-pink-950 block">
+                        <button
+                          onClick={() => setSelectedProfileUser(u)}
+                          className="font-bold text-pink-950 hover:text-pink-600 underline text-left focus:outline-none block"
+                        >
                           {u.displayName || u.userId} (@{u.userId})
-                        </span>
+                        </button>
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 text-[11px] font-bold uppercase">
@@ -840,6 +1081,13 @@ export function AdminDashboard({ onExit }) {
                         {new Date(u.created_at || Date.now()).toLocaleDateString()}
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1.5">
+                        <button
+                          onClick={() => setSelectedProfileUser(u)}
+                          className="px-2.5 py-1 rounded-lg bg-pink-100 text-pink-900 font-bold text-[11px] hover:bg-pink-200"
+                        >
+                          View Profile & Summary →
+                        </button>
+
                         <button
                           onClick={() => {
                             setEditingUser(u);
@@ -889,6 +1137,79 @@ export function AdminDashboard({ onExit }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Modal: Selected User Details & Mood Summary */}
+            {selectedProfileUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-lg w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                    <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                      👤 User Profile: @{selectedProfileUser.userId}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedProfileUser(null)}
+                      className="p-1 rounded-full bg-pink-100 text-pink-800 hover:bg-pink-200"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* User Profile Mood Summary Section */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200 space-y-2 text-left">
+                    <h4 className="font-heading font-extrabold text-sm text-pink-950 flex items-center space-x-1.5">
+                      <Heart size={16} className="fill-pink-400 text-pink-400" />
+                      <span>💗 Mood Summary</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+                      <div className="bg-white p-2.5 rounded-xl border border-pink-100">
+                        <span className="text-[10px] text-pink-600 font-bold block">Current Mood</span>
+                        <strong className="text-pink-950 text-xs">{moodAnalyticsData.currentMood}</strong>
+                      </div>
+
+                      <div className="bg-white p-2.5 rounded-xl border border-pink-100">
+                        <span className="text-[10px] text-pink-600 font-bold block">Most Common</span>
+                        <strong className="text-pink-950 text-xs">{moodAnalyticsData.mostCommonMood}</strong>
+                      </div>
+
+                      <div className="bg-white p-2.5 rounded-xl border border-pink-100">
+                        <span className="text-[10px] text-pink-600 font-bold block">Total Check-ins</span>
+                        <strong className="text-pink-950 text-xs">{moodAnalyticsData.totalCheckIns}</strong>
+                      </div>
+
+                      <div className="bg-white p-2.5 rounded-xl border border-pink-100">
+                        <span className="text-[10px] text-pink-600 font-bold block">Check-in Streak</span>
+                        <strong className="text-pink-950 text-xs">🔥 {moodAnalyticsData.streak} Days</strong>
+                      </div>
+                    </div>
+
+                    {/* Last 7 Days Pattern Badges */}
+                    <div className="pt-2">
+                      <span className="text-[11px] font-bold text-pink-800 block mb-1">Recent Check-in Moods:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {moodAnalyticsData.trendSeries.slice(-7).map((pt, idx) => (
+                          <span key={idx} className="px-2.5 py-1 rounded-full bg-white text-pink-900 border border-pink-200 text-xs font-bold shadow-2xs">
+                            {pt.mood}
+                          </span>
+                        ))}
+                        {moodAnalyticsData.trendSeries.length === 0 && (
+                          <span className="text-xs text-pink-600 italic">No recent check-ins</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setSelectedProfileUser(null)}
+                      className="w-full py-3 rounded-full bg-pink-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-pink-600"
+                    >
+                      Close Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal 1: Create User Modal */}
             {isCreateUserModalOpen && (
