@@ -31,6 +31,7 @@ import {
   deleteUserResponse,
   fetchUserActivityTimeline,
   exportUserAnswersCSV,
+  fetchAdminAuditLogs,
 } from '../lib/supabase';
 import {
   authenticateAdmin,
@@ -87,13 +88,14 @@ export function AdminDashboard({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'answers' | 'users' | 'justforyou'
+  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'audit' | 'answers' | 'users' | 'justforyou'
   const [filter, setFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time'); // 'All Time' | 'Today' | 'Yesterday' | 'Last 7 Days' | 'Last 30 Days'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserFilter, setSelectedUserFilter] = useState('All');
 
   const [activityTimeline, setActivityTimeline] = useState([]);
+  const [adminAuditLogs, setAdminAuditLogs] = useState([]);
   const [userAnswersList, setUserAnswersList] = useState([]);
   const [usersList, setUsersList] = useState([]);
   const [dailyMsgsList, setDailyMsgsList] = useState([]);
@@ -103,7 +105,7 @@ export function AdminDashboard({ onExit }) {
   // Selected User Profile details
   const [selectedProfileUser, setSelectedProfileUser] = useState(null);
 
-  // Create User Modal state
+  // Edit / Password Reset / Delete Modal states
   const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
@@ -111,7 +113,15 @@ export function AdminDashboard({ onExit }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [createUserError, setCreateUserError] = useState('');
 
-  // Response Delete Confirmation Modal state
+  const [editingUser, setEditingUser] = useState(null);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+
+  const [passwordResetUser, setPasswordResetUser] = useState(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
+
+  const [deletingUserTarget, setDeletingUserTarget] = useState(null);
   const [deletingResponseTarget, setDeletingResponseTarget] = useState(null);
 
   useEffect(() => {
@@ -126,15 +136,19 @@ export function AdminDashboard({ onExit }) {
       const managedUsers = fetchManagedUsers();
       setUsersList(managedUsers);
 
-      const rData = await fetchAllUserResponses('All');
-      const actData = await fetchUserActivityTimeline('usr-amritayadav', 'All');
+      const [rData, actData, auditData] = await Promise.all([
+        fetchAllUserResponses('All'),
+        fetchUserActivityTimeline('usr-amritayadav', 'All'),
+        fetchAdminAuditLogs(),
+      ]);
       
-      setUserAnswersList(rData);
-      setActivityTimeline(actData);
+      setUserAnswersList(rData || []);
+      setActivityTimeline(actData || []);
+      setAdminAuditLogs(auditData || []);
 
       if (activeTab === 'justforyou') {
         const dData = await fetchDailyMessages({ includeInactive: true });
-        setDailyMsgsList(dData);
+        setDailyMsgsList(dData || []);
       }
     } catch (e) {
       console.error('[AdminDashboard] Fetch error:', e);
@@ -165,6 +179,7 @@ export function AdminDashboard({ onExit }) {
     logoutAdmin();
     setIsAuthenticated(false);
     setActivityTimeline([]);
+    setAdminAuditLogs([]);
     setUserAnswersList([]);
     setUsersList([]);
     if (onExit) onExit();
@@ -198,6 +213,72 @@ export function AdminDashboard({ onExit }) {
       loadDashboardData();
     } catch (err) {
       setCreateUserError(err.message);
+    }
+  };
+
+  // Edit User Handler
+  const handleEditUserSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      await adminEditUser({
+        userId: editingUser.userId,
+        displayName: editDisplayName,
+        status: editStatus,
+      });
+      setSuccessNotice('User account updated successfully ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      setEditingUser(null);
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Edit user error:', err);
+    }
+  };
+
+  // Status Toggle Handler
+  const handleToggleStatus = async (userId) => {
+    try {
+      await adminToggleUserStatus(userId);
+      setSuccessNotice('User status updated ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Toggle status error:', err);
+    }
+  };
+
+  // Password Reset Handler
+  const handlePasswordResetSubmit = async (e) => {
+    e.preventDefault();
+    if (!passwordResetUser) return;
+    setResetPasswordError('');
+
+    try {
+      await adminChangeUserPassword(passwordResetUser.userId, resetPasswordInput);
+      setSuccessNotice('Password reset successfully ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      setPasswordResetUser(null);
+      setResetPasswordInput('');
+      loadDashboardData();
+    } catch (err) {
+      setResetPasswordError(err.message);
+    }
+  };
+
+  // Delete User Handler
+  const handleConfirmDeleteUser = async () => {
+    if (!deletingUserTarget) return;
+
+    try {
+      await adminDeleteUser(deletingUserTarget.userId);
+      setSuccessNotice('User account deleted ✓');
+      setTimeout(() => setSuccessNotice(''), 3000);
+      loadDashboardData();
+    } catch (err) {
+      console.error('[Admin] Delete user error:', err);
+    } finally {
+      setDeletingUserTarget(null);
     }
   };
 
@@ -303,212 +384,176 @@ export function AdminDashboard({ onExit }) {
 
   const filteredActivity = activityTimeline.filter((act) => {
     if (selectedUserFilter !== 'All' && act.user_id !== selectedUserFilter) return false;
-    if (filter !== 'All' && act.event_type !== filter) return false;
+    if (filter !== 'All' && filter !== 'onboarding' && act.event_type !== filter) return false;
+    if (filter === 'onboarding' && act.metadata?.source !== 'login_onboarding') return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      act.title.toLowerCase().includes(q) ||
+      (act.title && act.title.toLowerCase().includes(q)) ||
       (act.description && act.description.toLowerCase().includes(q)) ||
-      (act.metadata?.answer && act.metadata.answer.toLowerCase().includes(q))
+      (act.user_id && act.user_id.toLowerCase().includes(q))
     );
   });
 
-  // Calculate User Online/Active Status (Active within last 15 mins)
-  const isUserActiveNow = (userId) => {
-    const userActs = activityTimeline.filter((a) => a.user_id === userId);
+  const filteredAuditLogs = adminAuditLogs.filter((log) => {
+    if (selectedUserFilter !== 'All' && log.target_user_id !== selectedUserFilter) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (log.action && log.action.toLowerCase().includes(q)) ||
+      (log.target_user_id && log.target_user_id.toLowerCase().includes(q)) ||
+      (log.details && log.details.toLowerCase().includes(q))
+    );
+  });
+
+  const isUserActiveNow = (uId) => {
+    const userActs = activityTimeline.filter((a) => a.user_id === uId);
     if (userActs.length === 0) return false;
-    const latestTime = new Date(userActs[0].created_at).getTime();
-    const nowTime = Date.now();
-    return nowTime - latestTime <= 15 * 60 * 1000;
+    const latest = new Date(userActs[0].created_at || Date.now()).getTime();
+    return Date.now() - latest < 5 * 60 * 1000;
   };
 
-  const totalUsers = usersList.length;
-  const totalResponses = userAnswersList.length;
-  const todayStr = new Date().toLocaleDateString();
-  const todayResponses = userAnswersList.filter((r) => r.date === todayStr).length;
-
   return (
-    <div className="fixed inset-0 z-50 bg-pink-50 overflow-y-auto p-4 sm:p-8 text-pink-950 font-body select-none">
+    <div className="min-h-screen bg-pink-50/50 text-pink-950 font-body p-4 sm:p-8 select-none overflow-x-hidden">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-pink-200 shadow-md bg-white/90">
+        {/* Header Bar */}
+        <header className="glass-panel p-6 rounded-3xl bg-white/90 border-2 border-pink-200 shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center shadow-inner">
-              <ShieldCheck size={26} />
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-400 to-rose-400 text-white flex items-center justify-center shadow-md">
+              <ShieldCheck size={24} />
             </div>
-            <div>
+            <div className="text-left">
               <h1 className="font-heading font-extrabold text-2xl text-pink-950">
-                Amrita's Private Admin
+                Admin Control Center
               </h1>
-              <p className="text-xs text-pink-700 font-semibold">Live User Activity Monitor & Account Manager</p>
+              <p className="text-xs text-pink-700 font-semibold">
+                Protected User Management, Responses & Live Activity Monitoring
+              </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
-            {/* Tab Navigation */}
-            <div className="flex items-center bg-pink-100 p-1 rounded-full text-xs font-bold">
-              <button
-                onClick={() => setActiveTab('activity')}
-                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
-                  activeTab === 'activity' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
-                }`}
-              >
-                <Activity size={13} />
-                <span>📊 Live Activity</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('answers')}
-                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
-                  activeTab === 'answers' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
-                }`}
-              >
-                <MessageSquare size={13} />
-                <span>💬 All Responses</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`px-3.5 py-1.5 rounded-full transition-all flex items-center space-x-1 ${
-                  activeTab === 'users' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800'
-                }`}
-              >
-                <Users size={13} />
-                <span>👥 User Management</span>
-              </button>
-            </div>
-
             <button
-              onClick={loadDashboardData}
-              className="p-2.5 rounded-full bg-pink-100 text-pink-800 hover:bg-pink-200"
-              title="Refresh Data"
+              onClick={() => {
+                setCreateUserError('');
+                setIsCreateUserModalOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all flex items-center space-x-1.5 cursor-pointer"
             >
-              <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+              <UserPlus size={15} />
+              <span>+ CREATE USER</span>
             </button>
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-full bg-rose-500 text-white text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5 shadow-md hover:bg-rose-600 transition-colors"
+              className="px-4 py-2.5 rounded-full bg-rose-100 text-rose-800 font-bold text-xs hover:bg-rose-200 transition-colors flex items-center space-x-1.5"
             >
               <LogOut size={14} />
               <span>Logout</span>
             </button>
           </div>
-        </div>
+        </header>
 
         {successNotice && (
-          <div className="p-4 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2 animate-fadeIn">
-            <CheckCircle size={16} className="text-emerald-600" />
-            <span>{successNotice}</span>
+          <div className="p-3 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold text-center animate-fadeIn">
+            {successNotice}
           </div>
         )}
 
-        {/* Top Summary Statistics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-white border border-pink-200 shadow-sm text-center">
-            <span className="text-xs font-bold text-pink-700 uppercase block">Total Users</span>
-            <span className="font-extrabold text-xl text-pink-950 mt-1 block">{totalUsers}</span>
+        {/* Search & User Selection Bar */}
+        <div className="glass-panel p-4 rounded-2xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search user, response, question..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-300"
+            />
+            <Search size={14} className="absolute left-3 top-3 text-pink-400" />
           </div>
 
-          <div className="p-4 rounded-2xl bg-white border border-pink-200 shadow-sm text-center">
-            <span className="text-xs font-bold text-pink-700 uppercase block">Total Responses</span>
-            <span className="font-extrabold text-xl text-pink-950 mt-1 block">{totalResponses}</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-pink-200 shadow-sm text-center">
-            <span className="text-xs font-bold text-pink-700 uppercase block">Today's Responses</span>
-            <span className="font-extrabold text-xl text-pink-950 mt-1 block">{todayResponses}</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white border border-pink-200 shadow-sm text-center">
-            <span className="text-xs font-bold text-pink-700 uppercase block">Total Activities</span>
-            <span className="font-extrabold text-xl text-pink-950 mt-1 block">{activityTimeline.length}</span>
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <Filter size={14} className="text-pink-600" />
+            <span className="text-xs font-bold text-pink-900">User:</span>
+            <select
+              value={selectedUserFilter}
+              onChange={(e) => setSelectedUserFilter(e.target.value)}
+              className="p-2 rounded-xl bg-pink-50/60 border border-pink-200 text-pink-950 text-xs font-bold focus:outline-none"
+            >
+              <option value="All">All Users ({usersList.length})</option>
+              {usersList.map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  @{u.userId} ({u.displayName || u.userId})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Tab 1: Phase 33 LIVE USER ACTIVITY MONITOR 📊 */}
+        {/* Tab Navigation Menu */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-pink-200 pb-3">
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'activity' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <Activity size={15} />
+            <span>📊 Live User Activity ({filteredActivity.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'audit' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <ShieldCheck size={15} />
+            <span>👑 Admin Audit Logs ({filteredAuditLogs.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('answers')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'answers' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <MessageSquare size={15} />
+            <span>💬 All Responses ({filteredAnswers.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`px-5 py-2.5 rounded-2xl font-heading font-extrabold text-xs uppercase tracking-wider transition-all flex items-center space-x-1.5 ${
+              activeTab === 'users' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-pink-900 hover:bg-pink-100'
+            }`}
+          >
+            <Users size={15} />
+            <span>👥 User Management ({usersList.length})</span>
+          </button>
+        </div>
+
+        {/* Tab 1: 📊 LIVE USER ACTIVITY */}
         {activeTab === 'activity' && (
           <div className="space-y-6">
-            <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm space-y-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="relative w-full sm:w-72">
-                  <Search size={16} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-pink-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search activity timeline..."
-                    className="w-full pl-10 pr-4 py-2 rounded-full bg-pink-50 border border-pink-200 text-xs font-bold text-pink-950 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs font-bold text-pink-800">User Filter:</span>
-                  <select
-                    value={selectedUserFilter}
-                    onChange={(e) => setSelectedUserFilter(e.target.value)}
-                    className="px-3.5 py-1.5 rounded-full bg-pink-50 border border-pink-200 text-xs font-bold text-pink-950 focus:outline-none"
+            
+            {/* Filter Pills */}
+            <div className="glass-panel p-4 rounded-2xl bg-white border border-pink-200 shadow-sm flex items-center justify-between flex-wrap gap-2">
+              <span className="text-xs font-bold text-pink-900">Activity Category Filter:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {['All', 'onboarding', 'login', 'daily_question_answered', 'daily_checkin_completed', 'mood_checkin', 'journal_created', 'hug_sent', 'star_discovered'].map((fKey) => (
+                  <button
+                    key={fKey}
+                    onClick={() => setFilter(fKey)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                      filter === fKey ? 'bg-pink-500 text-white shadow-sm' : 'bg-pink-50 text-pink-800 hover:bg-pink-100'
+                    }`}
                   >
-                    <option value="All">All Users</option>
-                    {usersList.map((u) => (
-                      <option key={u.userId} value={u.userId}>@{u.userId}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Date & Feature Filters */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-pink-100">
-                <span className="text-xs font-bold text-pink-700 mr-1">Feature:</span>
-                <button
-                  onClick={() => setFilter('All')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'All' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  All Features
-                </button>
-                <button
-                  onClick={() => setFilter('question_answer')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'question_answer' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  ❓ Q&A Answers
-                </button>
-                <button
-                  onClick={() => setFilter('mood_checkin')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'mood_checkin' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  ❤️ Mood Check-ins
-                </button>
-                <button
-                  onClick={() => setFilter('surprise_opened')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'surprise_opened' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  🎁 Surprises
-                </button>
-                <button
-                  onClick={() => setFilter('digital_hug')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'digital_hug' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  🤗 Digital Hugs
-                </button>
-                <button
-                  onClick={() => setFilter('star_discovered')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    filter === 'star_discovered' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-800'
-                  }`}
-                >
-                  🌌 Sky Stars
-                </button>
+                    {fKey === 'onboarding' ? '📋 5 Login Answers' : fKey.replace(/_/g, ' ')}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -535,7 +580,7 @@ export function AdminDashboard({ onExit }) {
                   {filteredActivity.map((act) => (
                     <div
                       key={act.id}
-                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-1.5 hover:bg-pink-50 transition-colors"
+                      className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-1.5 hover:bg-pink-50 transition-colors text-left"
                     >
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center space-x-2">
@@ -578,7 +623,94 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Tab 2: 💬 ALL USER RESPONSES */}
+        {/* Tab 2: 👑 ADMIN AUDIT LOGS */}
+        {activeTab === 'audit' && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-pink-100 shadow-sm text-left">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck size={20} className="text-pink-600" />
+                <h3 className="font-heading font-extrabold text-lg text-pink-950">
+                  Admin User-Management Audit Trail ({filteredAuditLogs.length})
+                </h3>
+              </div>
+              <span className="text-xs font-bold text-pink-700 bg-pink-50 px-3 py-1 rounded-full border border-pink-100">
+                Audited Actions
+              </span>
+            </div>
+
+            {filteredAuditLogs.length === 0 ? (
+              <div className="glass-panel p-12 text-center text-pink-700 font-bold text-sm bg-white/80 rounded-3xl">
+                No admin audit events found. Actions performed on user accounts will appear here. 👑
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredAuditLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-5 rounded-2xl bg-white border border-pink-200 shadow-sm hover:shadow-md transition-all text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-start space-x-3.5">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5 ${
+                        log.status === 'Failed'
+                          ? 'bg-rose-500'
+                          : log.action.includes('DELETE')
+                          ? 'bg-red-500'
+                          : log.action.includes('CREATE')
+                          ? 'bg-emerald-500'
+                          : log.action.includes('PASSWORD')
+                          ? 'bg-amber-500'
+                          : 'bg-pink-500'
+                      }`}>
+                        {log.action.includes('DELETE') ? (
+                          <Trash2 size={18} />
+                        ) : log.action.includes('CREATE') ? (
+                          <UserPlus size={18} />
+                        ) : log.action.includes('PASSWORD') ? (
+                          <KeyRound size={18} />
+                        ) : (
+                          <ShieldCheck size={18} />
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-heading font-extrabold text-sm text-pink-950">
+                            {log.action}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            log.status === 'Failed'
+                              ? 'bg-rose-100 text-rose-700'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {log.status || 'Success'}
+                          </span>
+                        </div>
+
+                        <p className="text-xs font-bold text-pink-900">
+                          Target User: <span className="text-pink-700 font-extrabold">@{log.target_user_id}</span> {log.target_user_display_name && log.target_user_display_name !== log.target_user_id ? `(${log.target_user_display_name})` : ''}
+                        </p>
+
+                        <p className="text-xs text-pink-700 font-medium">
+                          {log.details}
+                        </p>
+
+                        <p className="text-[11px] font-semibold text-pink-500 flex items-center space-x-2 pt-1">
+                          <span>👑 Admin: {log.admin_id || 'admin'}</span>
+                          <span>•</span>
+                          <span>📅 {log.date || new Date(log.created_at).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>⏰ {log.time || new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: 💬 ALL USER RESPONSES */}
         {activeTab === 'answers' && (
           <div className="space-y-6">
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -609,7 +741,7 @@ export function AdminDashboard({ onExit }) {
                   {filteredAnswers.map((ans) => (
                     <div
                       key={ans.id}
-                      className="p-5 rounded-2xl bg-pink-50/60 border border-pink-100 space-y-3 flex flex-col justify-between"
+                      className="p-5 rounded-2xl bg-pink-50/60 border border-pink-100 space-y-3 flex flex-col justify-between text-left"
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-[11px] font-bold text-pink-600">
@@ -647,7 +779,7 @@ export function AdminDashboard({ onExit }) {
           </div>
         )}
 
-        {/* Tab 3: 👥 USER MANAGEMENT (ALWAYS INCLUDES + CREATE USER) */}
+        {/* Tab 4: 👥 USER MANAGEMENT (WITH FULL ACTIONS & AUDIT LOGGING) */}
         {activeTab === 'users' && (
           <div className="space-y-6">
             
@@ -657,10 +789,9 @@ export function AdminDashboard({ onExit }) {
                 <h3 className="font-heading font-bold text-lg text-pink-950">
                   👥 USER MANAGEMENT ({usersList.length} accounts)
                 </h3>
-                <p className="text-xs text-pink-700">Create, edit, and manage User accounts</p>
+                <p className="text-xs text-pink-700">Create, edit, reset password, disable, and delete User accounts</p>
               </div>
 
-              {/* ALWAYS PROMINENT + CREATE USER BUTTON */}
               <button
                 onClick={() => {
                   setCreateUserError('');
@@ -675,7 +806,7 @@ export function AdminDashboard({ onExit }) {
 
             {/* Users Table */}
             <div className="glass-panel p-6 rounded-3xl bg-white border border-pink-200 shadow-sm overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[600px]">
+              <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-pink-100 text-[11px] font-bold text-pink-700 uppercase tracking-wider">
                     <th className="py-3 px-4">User</th>
@@ -689,12 +820,9 @@ export function AdminDashboard({ onExit }) {
                   {filteredUsers.map((u) => (
                     <tr key={u.id || u.userId} className="hover:bg-pink-50/50 transition-colors">
                       <td className="py-3.5 px-4">
-                        <button
-                          onClick={() => setSelectedProfileUser(u)}
-                          className="font-bold text-pink-950 hover:text-pink-600 underline text-left focus:outline-none"
-                        >
+                        <span className="font-bold text-pink-950 block">
                           {u.displayName || u.userId} (@{u.userId})
-                        </button>
+                        </span>
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800 text-[11px] font-bold uppercase">
@@ -713,11 +841,48 @@ export function AdminDashboard({ onExit }) {
                       </td>
                       <td className="py-3.5 px-4 text-right space-x-1.5">
                         <button
-                          onClick={() => setSelectedProfileUser(u)}
-                          className="px-3 py-1 rounded-lg bg-pink-100 text-pink-800 font-bold text-[11px]"
+                          onClick={() => {
+                            setEditingUser(u);
+                            setEditDisplayName(u.displayName || u.userId);
+                            setEditStatus(u.status || 'active');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-pink-100 text-pink-900 font-bold text-[11px] hover:bg-pink-200"
+                          title="Edit User Details"
                         >
-                          View Activity & Profile →
+                          ✏️ Edit
                         </button>
+
+                        <button
+                          onClick={() => {
+                            setPasswordResetUser(u);
+                            setResetPasswordInput('');
+                            setResetPasswordError('');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px] hover:bg-amber-200"
+                          title="Reset User Password"
+                        >
+                          🔑 Reset Pass
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleStatus(u.userId)}
+                          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] ${
+                            u.status === 'disabled' ? 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                          title={u.status === 'disabled' ? 'Enable User' : 'Disable User'}
+                        >
+                          {u.status === 'disabled' ? '🟢 Enable' : '🔒 Disable'}
+                        </button>
+
+                        {u.userId.toLowerCase() !== 'amritayadav' && (
+                          <button
+                            onClick={() => setDeletingUserTarget(u)}
+                            className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 font-bold text-[11px] hover:bg-rose-200"
+                            title="Delete User"
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -725,10 +890,10 @@ export function AdminDashboard({ onExit }) {
               </table>
             </div>
 
-            {/* Modal: Create User Modal */}
+            {/* Modal 1: Create User Modal */}
             {isCreateUserModalOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
-                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
                   <h3 className="font-heading font-extrabold text-xl text-pink-950">
                     + Create New User Account 👤
                   </h3>
@@ -801,6 +966,136 @@ export function AdminDashboard({ onExit }) {
                 </div>
               </div>
             )}
+
+            {/* Modal 2: Edit User Details */}
+            {editingUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
+                  <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                    ✏️ Edit User Details (@{editingUser.userId})
+                  </h3>
+
+                  <form onSubmit={handleEditUserSubmit} className="space-y-3.5">
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Display Name</label>
+                      <input
+                        type="text"
+                        value={editDisplayName}
+                        onChange={(e) => setEditDisplayName(e.target.value)}
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">Account Status</label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      >
+                        <option value="active">Active 🟢</option>
+                        <option value="disabled">Disabled 🔒</option>
+                      </select>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingUser(null)}
+                        className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="w-1/2 py-3 rounded-full bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
+                      >
+                        Save Changes
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal 3: Change/Reset Password */}
+            {passwordResetUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-left">
+                  <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                    🔑 Reset Password for @{passwordResetUser.userId}
+                  </h3>
+
+                  <form onSubmit={handlePasswordResetSubmit} className="space-y-3.5">
+                    <div>
+                      <label className="text-xs font-bold text-pink-900 uppercase block mb-1">New Password (min 8 chars) *</label>
+                      <input
+                        type="password"
+                        value={resetPasswordInput}
+                        onChange={(e) => setResetPasswordInput(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full p-3 rounded-2xl bg-pink-50 border border-pink-200 text-pink-950 text-sm font-bold focus:outline-none"
+                      />
+                    </div>
+
+                    {resetPasswordError && (
+                      <p className="text-xs font-bold text-rose-600 animate-bounce">{resetPasswordError}</p>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setPasswordResetUser(null)}
+                        className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="w-1/2 py-3 rounded-full bg-gradient-to-r from-amber-400 to-pink-500 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:scale-105 transition-all"
+                      >
+                        Reset Password
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal 4: Delete User Confirmation */}
+            {deletingUserTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/30 backdrop-blur-md select-none">
+                <div className="glass-panel p-6 sm:p-8 rounded-3xl max-w-md w-full bg-white border-2 border-pink-300 shadow-2xl space-y-4 text-center">
+                  <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                    <Trash2 size={28} />
+                  </div>
+
+                  <h3 className="font-heading font-extrabold text-xl text-pink-950">
+                    Delete User Account @{deletingUserTarget.userId}?
+                  </h3>
+
+                  <p className="text-xs text-pink-700 font-semibold bg-rose-50 p-3 rounded-2xl border border-rose-100">
+                    This action will permanently delete user account details. Audit history will be safely preserved.
+                  </p>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => setDeletingUserTarget(null)}
+                      className="w-1/2 py-3 rounded-full bg-pink-100 text-pink-950 font-bold text-xs uppercase tracking-wider"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmDeleteUser}
+                      className="w-1/2 py-3 rounded-full bg-rose-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-rose-700 transition-all"
+                    >
+                      Delete Account
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

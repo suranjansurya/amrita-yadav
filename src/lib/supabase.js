@@ -1204,6 +1204,91 @@ export async function saveUserStarDiscovery(user_id = 'usr-amritayadav', starId)
   return local;
 }
 
+export async function saveAdminAuditLog({
+  action,
+  target_user_id,
+  target_user_display_name = '',
+  details = '',
+  status = 'Success',
+  admin_id = 'admin',
+}) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const cleanDetails = (details || '').replace(/password[:=]\s*\S+/gi, 'password:[REDACTED]');
+
+  const record = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    admin_id,
+    action,
+    target_user_id: target_user_id || 'unknown',
+    target_user_display_name: target_user_display_name || target_user_id || 'unknown',
+    details: cleanDetails,
+    status: status || 'Success',
+    created_at: now.toISOString(),
+    date: dateStr,
+    time: timeStr,
+  };
+
+  const localLogs = JSON.parse(localStorage.getItem('amrita_admin_audit_logs') || '[]');
+  localLogs.unshift(record);
+  localStorage.setItem('amrita_admin_audit_logs', JSON.stringify(localLogs));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('admin_audit_logs').upsert([
+        {
+          id: record.id,
+          admin_id: record.admin_id,
+          action: record.action,
+          target_user_id: record.target_user_id,
+          target_user_display_name: record.target_user_display_name,
+          details: record.details,
+          status: record.status,
+          created_at: record.created_at,
+        },
+      ]);
+    } catch (e) {
+      console.warn('[Supabase] Audit log save exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function fetchAdminAuditLogs() {
+  let records = [];
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      const { data, error } = await supabase
+        .from('admin_audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch admin audit logs exception, using local cache');
+    }
+  }
+
+  if (records.length === 0) {
+    records = JSON.parse(localStorage.getItem('amrita_admin_audit_logs') || '[]');
+  }
+
+  return records;
+}
+
 export async function fetchDailyMessages({ includeInactive = false } = {}) {
   let records = [];
 

@@ -3,9 +3,10 @@
  * Admin Auth: In-memory only (Resets on Refresh F5)
  * User Auth: Single Global User Session (First Page Login -> Full Website Access)
  * Role System: Admin PIN (sangam9534) vs Normal User role ('user')
+ * Admin User-Management Audit Logging System
  */
 
-import { supabase, saveUserActivity } from './supabase';
+import { supabase, saveUserActivity, saveAdminAuditLog } from './supabase';
 
 async function hashPin(pin) {
   const encoder = new TextEncoder();
@@ -211,7 +212,7 @@ export async function logoutUser() {
 }
 
 /* ===================================================
-   3. PHASE 31 & 33: ADMIN USER ACCOUNT MANAGER
+   3. PHASE 31, 33 & AUDIT: ADMIN USER ACCOUNT MANAGER
    =================================================== */
 
 export function fetchManagedUsers() {
@@ -235,21 +236,45 @@ export function fetchManagedUsers() {
 
 export async function adminCreateUser({ username, displayName, password }) {
   if (!username || !username.trim()) {
+    saveAdminAuditLog({
+      action: 'USER_CREATE_FAILED',
+      target_user_id: username || 'unknown',
+      details: 'Username is required.',
+      status: 'Failed',
+    });
     throw new Error('Username is required.');
   }
 
   const cleanUsername = username.trim().toLowerCase();
 
   if (cleanUsername.length < 3) {
+    saveAdminAuditLog({
+      action: 'USER_CREATE_FAILED',
+      target_user_id: cleanUsername,
+      details: 'Username must be at least 3 characters.',
+      status: 'Failed',
+    });
     throw new Error('Username must be at least 3 characters.');
   }
 
   if (!password || password.length < 8) {
+    saveAdminAuditLog({
+      action: 'USER_CREATE_FAILED',
+      target_user_id: cleanUsername,
+      details: 'Password must be at least 8 characters.',
+      status: 'Failed',
+    });
     throw new Error('Password must be at least 8 characters.');
   }
 
   const existingUsers = fetchManagedUsers();
   if (existingUsers.some((u) => u.userId.toLowerCase() === cleanUsername)) {
+    saveAdminAuditLog({
+      action: 'USER_CREATE_FAILED',
+      target_user_id: cleanUsername,
+      details: 'Username already exists.',
+      status: 'Failed',
+    });
     throw new Error('Username already exists.');
   }
 
@@ -286,6 +311,15 @@ export async function adminCreateUser({ username, displayName, password }) {
     }
   }
 
+  // Audit Log: User Created
+  saveAdminAuditLog({
+    action: 'USER_CREATED',
+    target_user_id: newUser.userId,
+    target_user_display_name: newUser.displayName,
+    details: `Created user account @${newUser.userId} with role 'user'`,
+    status: 'Success',
+  });
+
   return newUser;
 }
 
@@ -303,22 +337,46 @@ export async function adminEditUser({ userId, displayName, status }) {
   });
 
   localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+
+  saveAdminAuditLog({
+    action: 'USER_UPDATED',
+    target_user_id: userId,
+    target_user_display_name: displayName || userId,
+    details: `Updated user account details: Display Name -> ${displayName}, Status -> ${status}`,
+    status: 'Success',
+  });
+
   return true;
 }
 
 export async function adminToggleUserStatus(userId) {
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
+  let newStatus = 'active';
   const updated = localUsers.map((u) => {
     if (u.userId.toLowerCase() === userId.toLowerCase()) {
-      return { ...u, status: u.status === 'disabled' ? 'active' : 'disabled' };
+      newStatus = u.status === 'disabled' ? 'active' : 'disabled';
+      return { ...u, status: newStatus };
     }
     return u;
   });
   localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+
+  saveAdminAuditLog({
+    action: newStatus === 'disabled' ? 'USER_DISABLED' : 'USER_ENABLED',
+    target_user_id: userId,
+    details: `Account status updated to ${newStatus.toUpperCase()}`,
+    status: 'Success',
+  });
 }
 
 export async function adminChangeUserPassword(userId, newPassword) {
   if (!newPassword || newPassword.length < 8) {
+    saveAdminAuditLog({
+      action: 'PASSWORD_RESET_FAILED',
+      target_user_id: userId,
+      details: 'Password must be at least 8 characters.',
+      status: 'Failed',
+    });
     throw new Error('Password must be at least 8 characters.');
   }
 
@@ -331,12 +389,33 @@ export async function adminChangeUserPassword(userId, newPassword) {
     return u;
   });
   localStorage.setItem('amrita_registered_users', JSON.stringify(updated));
+
+  saveAdminAuditLog({
+    action: 'PASSWORD_RESET',
+    target_user_id: userId,
+    details: 'Admin reset user password successfully',
+    status: 'Success',
+  });
 }
 
 export async function adminDeleteUser(userId) {
   if (userId.toLowerCase() === 'amritayadav') {
+    saveAdminAuditLog({
+      action: 'USER_DELETE_FAILED',
+      target_user_id: userId,
+      details: 'Primary owner account (amritayadav) cannot be deleted.',
+      status: 'Failed',
+    });
     throw new Error('Primary owner account (amritayadav) cannot be deleted.');
   }
+
+  // Audit record MUST be created BEFORE user delete operation
+  saveAdminAuditLog({
+    action: 'USER_DELETED',
+    target_user_id: userId,
+    details: `Admin deleted user account @${userId}`,
+    status: 'Success',
+  });
 
   const localUsers = JSON.parse(localStorage.getItem('amrita_registered_users') || '[]');
   const updated = localUsers.filter((u) => u.userId.toLowerCase() !== userId.toLowerCase());
