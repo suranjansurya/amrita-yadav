@@ -18,6 +18,7 @@ import { HeartBalloonPopOpening } from './components/animations/HeartBalloonPopO
 import { MusicPlayer } from './components/common/MusicPlayer';
 import { DiscoveryModal } from './components/common/DiscoveryModal';
 import { ProgressNav } from './components/common/ProgressNav';
+import { SidebarNav } from './components/common/SidebarNav';
 
 // User Login, Heart Check-in, Mood History, Timeline, Memory Jar, Surprise Me, Digital Hug, Secret Unlock, Constellation, Just For You & Admin Dashboard
 import { UserLoginModal } from './components/common/UserLoginModal';
@@ -261,6 +262,37 @@ export default function App() {
     setIsHeartCheckInDone(true);
   };
 
+  const handleOpenFeature = (id) => {
+    switch (id) {
+      case 'justforyou':
+        setIsJustForYouOpen(true);
+        break;
+      case 'sky':
+        setIsConstellationOpen(true);
+        break;
+      case 'secrets':
+        setIsSecretUnlockOpen(true);
+        break;
+      case 'hug':
+        setIsDigitalHugOpen(true);
+        break;
+      case 'surprise':
+        setIsSurpriseMeOpen(true);
+        break;
+      case 'jar':
+        setIsMemoryJarOpen(true);
+        break;
+      case 'memories':
+        setIsMemoryTimelineOpen(true);
+        break;
+      case 'moods':
+        setIsMoodHistoryOpen(true);
+        break;
+      default:
+        break;
+    }
+  };
+
   // ROUTE GUARD 0: Authentication Session Restoration Loader
   if (authLoading) {
     return (
@@ -329,88 +361,12 @@ export default function App() {
       {/* Interactive Cursor Sparkle Trail */}
       <SparkleTrail isMobile={isMobile} />
 
-      {/* Top Left User Profile Badge & Quick Menu Buttons (FULL DIRECT ACCESS AFTER ONE LOGIN) */}
-      <div className="fixed top-6 left-6 z-40 select-none flex items-center space-x-2">
-        <div className="glass-panel px-4 py-2 rounded-full border border-pink-200 shadow-md bg-white/80 flex items-center space-x-3 text-xs font-bold text-pink-950">
-          <div className="flex items-center space-x-1.5 text-pink-700">
-            <User size={14} />
-            <span>{currentUser.displayName || currentUser.userId}</span>
-          </div>
-
-          <button
-            onClick={() => setIsJustForYouOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Just For You"
-          >
-            <span>💌 Just For You</span>
-          </button>
-
-          <button
-            onClick={() => setIsConstellationOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Interactive Constellation Sky"
-          >
-            <span>🌌 Sky</span>
-          </button>
-
-          <button
-            onClick={() => setIsSecretUnlockOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Secret Unlock Milestones"
-          >
-            <span>🔐 Secrets</span>
-          </button>
-
-          <button
-            onClick={() => setIsDigitalHugOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Receive a Digital Hug"
-          >
-            <span>🤗 Hug</span>
-          </button>
-
-          <button
-            onClick={() => setIsSurpriseMeOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Trigger a Random Surprise"
-          >
-            <span>🎁 Surprise</span>
-          </button>
-
-          <button
-            onClick={() => setIsMemoryJarOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Memory Jar"
-          >
-            <span>🫙 Jar</span>
-          </button>
-
-          <button
-            onClick={() => setIsMemoryTimelineOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Memory Timeline"
-          >
-            <span>❤️ Timeline</span>
-          </button>
-
-          <button
-            onClick={() => setIsMoodHistoryOpen(true)}
-            className="pl-2 border-l border-pink-200 text-[11px] text-pink-600 hover:text-pink-900 font-bold tracking-wider flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Open Mood History"
-          >
-            <span>🌸 Moods</span>
-          </button>
-
-          <button
-            onClick={handleUserLogout}
-            className="pl-2 border-l border-pink-200 text-rose-600 hover:text-rose-800 font-bold flex items-center space-x-1 focus:outline-none cursor-pointer"
-            title="Log Out"
-          >
-            <LogOut size={13} />
-            <span>Logout</span>
-          </button>
-        </div>
-      </div>
+      {/* Premium Vertical Sidebar Navigation Column */}
+      <SidebarNav
+        currentUser={currentUser}
+        onOpenFeature={handleOpenFeature}
+        onLogout={handleUserLogout}
+      />
 
       {/* 3D Dynamic Dream Canvas */}
       <DreamCanvas section={currentSection} isMobile={isMobile} />
