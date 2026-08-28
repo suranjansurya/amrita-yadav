@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { loginUser } from '../../lib/auth';
-import { Heart, Lock, User, Sparkles, ShieldAlert } from 'lucide-react';
+import { Heart, Lock, User, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdmin }) {
+export function UserLoginModal({ onLoginSuccess, onOpenAdmin }) {
   const [userIdInput, setUserIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -24,7 +24,6 @@ export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdm
       const user = await loginUser({
         userId: userIdInput,
         password: passwordInput,
-        entryPoint: entryPoint,
         rememberMe: rememberMe,
       });
 
@@ -46,8 +45,6 @@ export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdm
     }
   };
 
-  const formattedEntryPoint = (entryPoint || 'world').toUpperCase();
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-pink-950/40 backdrop-blur-lg animate-fadeIn select-none">
       <div className="glass-panel p-8 rounded-3xl max-w-md w-full border-2 border-pink-300 shadow-2xl bg-white/95 text-center relative">
@@ -61,16 +58,8 @@ export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdm
           Welcome to Amrita's World
         </h2>
 
-        {/* Entry Point Badge */}
-        <div className="my-2">
-          <span className="px-3 py-1 rounded-full bg-pink-100 text-pink-800 text-xs font-bold uppercase tracking-wider inline-flex items-center space-x-1">
-            <Lock size={12} className="text-pink-600" />
-            <span>Entry Gate: {formattedEntryPoint}</span>
-          </span>
-        </div>
-
         <p className="font-script text-xl text-pink-700 mb-6">
-          Enter User credentials to unlock this protected entry point... ✨
+          Enter credentials to unlock your little dream world... ✨
         </p>
 
         {/* Login Form */}
@@ -126,7 +115,7 @@ export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdm
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="rounded border-pink-300 text-pink-500 focus:ring-pink-400"
               />
-              <span>Keep entry point unlocked</span>
+              <span>Keep me logged in</span>
             </label>
 
             {onOpenAdmin && (
@@ -147,7 +136,7 @@ export function UserLoginModal({ entryPoint = 'world', onLoginSuccess, onOpenAdm
             className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-400 to-rose-400 text-white font-bold text-sm uppercase tracking-wider shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center space-x-2"
           >
             <Sparkles size={18} />
-            <span>{isLoggingIn ? 'Authenticating...' : `Unlock ${formattedEntryPoint}`}</span>
+            <span>{isLoggingIn ? 'Authenticating...' : 'Enter My World ❤️'}</span>
           </button>
 
         </form>
