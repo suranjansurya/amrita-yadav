@@ -844,6 +844,15 @@ export async function saveOrUpdateHeartCheckIn({
     user_id,
   });
 
+  // Automatic Daily Check-in Notification (Idempotent per day)
+  createNotification({
+    title: '💗 Daily Check-in Complete',
+    message: "Today's answers have been saved ❤️",
+    type: 'daily_checkin',
+    target_user_id: user_id,
+    deduplication_key: `dedup_checkin_${String(user_id).replace(/^usr-/, '').toLowerCase()}_${todayStr}`,
+  });
+
   return updatedEntry;
 }
 
@@ -1291,6 +1300,204 @@ export async function toggleMemoryFavorite(user_id = 'usr-amritayadav', memoryId
   });
 
   return updatedFavs;
+}
+
+export async function fetchUserNotifications({ user_id = 'usr-amritayadav', includeUnpublished = false } = {}) {
+  let records = [];
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      let query = supabase.from('notifications').select('*').order('created_at', { ascending: false });
+      if (!includeUnpublished) {
+        query = query.eq('is_published', true);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        records = data;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Fetch notifications failed, using local storage');
+    }
+  }
+
+  if (records.length === 0) {
+    const local = JSON.parse(localStorage.getItem('amrita_notifications_data') || '[]');
+    records = includeUnpublished ? local : local.filter((n) => n.is_published !== false);
+  }
+
+  if (!includeUnpublished) {
+    records = records.filter((n) => {
+      if (!n.target_user_id || n.target_user_id === 'All' || n.target_user_id === 'all') return true;
+      const cleanTarget = String(n.target_user_id).replace(/^usr-/, '').toLowerCase();
+      return cleanTarget === cleanId;
+    });
+  }
+
+  const readState = JSON.parse(localStorage.getItem(`amrita_read_notifications_${cleanId}`) || '[]');
+  const recordsWithRead = records.map((n) => ({
+    ...n,
+    is_read: Boolean(n.is_read || readState.includes(n.id)),
+  }));
+
+  const unreadCount = recordsWithRead.filter((n) => !n.is_read).length;
+
+  return {
+    notifications: recordsWithRead,
+    unreadCount,
+  };
+}
+
+export async function createNotification({
+  title,
+  message,
+  type = 'announcement',
+  target_user_id = 'All',
+  is_published = true,
+  deduplication_key = null,
+}) {
+  const now = new Date();
+  const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+  const local = JSON.parse(localStorage.getItem('amrita_notifications_data') || '[]');
+
+  if (deduplication_key) {
+    const exists = local.some((n) => n.deduplication_key === deduplication_key);
+    if (exists) return null;
+  }
+
+  const record = {
+    id,
+    title: title.trim(),
+    message: message.trim(),
+    type: type || 'announcement',
+    target_user_id: target_user_id || 'All',
+    is_read: false,
+    is_published: is_published !== false,
+    deduplication_key: deduplication_key || null,
+    created_at: now.toISOString(),
+    date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+  };
+
+  local.unshift(record);
+  localStorage.setItem('amrita_notifications_data', JSON.stringify(local));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('notifications').upsert([
+        {
+          id: record.id,
+          title: record.title,
+          message: record.message,
+          type: record.type,
+          target_user_id: record.target_user_id,
+          is_read: false,
+          is_published: record.is_published,
+          deduplication_key: record.deduplication_key,
+          created_at: record.created_at,
+        },
+      ]);
+    } catch (e) {
+      console.warn('[Supabase] Notification upsert exception:', e);
+    }
+  }
+
+  return record;
+}
+
+export async function markNotificationAsRead(user_id = 'usr-amritayadav', notifId) {
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+  const readState = JSON.parse(localStorage.getItem(`amrita_read_notifications_${cleanId}`) || '[]');
+
+  if (!readState.includes(notifId)) {
+    readState.push(notifId);
+    localStorage.setItem(`amrita_read_notifications_${cleanId}`, JSON.stringify(readState));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('notifications').update({ is_read: true }).eq('id', notifId);
+      } catch (e) {
+        // Ignore fallback
+      }
+    }
+
+    saveUserActivity({
+      event_type: 'notification_read',
+      title: '🔔 Read Notification',
+      description: `Read notification ID: ${notifId}`,
+      user_id,
+    });
+  }
+}
+
+export async function markAllNotificationsAsRead(user_id = 'usr-amritayadav') {
+  const cleanId = String(user_id).replace(/^usr-/, '').toLowerCase();
+  const { notifications } = await fetchUserNotifications({ user_id, includeUnpublished: false });
+
+  const allIds = notifications.map((n) => n.id);
+  localStorage.setItem(`amrita_read_notifications_${cleanId}`, JSON.stringify(allIds));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('notifications').update({ is_read: true }).in('id', allIds);
+    } catch (e) {
+      // Ignore fallback
+    }
+  }
+
+  saveUserActivity({
+    event_type: 'notification_mark_all_read',
+    title: '🔔 Marked All Notifications Read',
+    description: `User marked all ${allIds.length} notifications as read`,
+    user_id,
+  });
+}
+
+export async function deleteNotification(notifId) {
+  const local = JSON.parse(localStorage.getItem('amrita_notifications_data') || '[]');
+  const target = local.find((n) => n.id === notifId);
+  const updated = local.filter((n) => n.id !== notifId);
+  localStorage.setItem('amrita_notifications_data', JSON.stringify(updated));
+
+  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    try {
+      await supabase.from('notifications').delete().eq('id', notifId);
+    } catch (e) {
+      console.warn('[Supabase] Notification delete exception:', e);
+    }
+  }
+
+  saveAdminAuditLog({
+    action: 'NOTIFICATION_DELETED',
+    target_user_id: target?.target_user_id || 'All',
+    details: `Deleted notification '${target?.title || notifId}'`,
+    status: 'Success',
+  });
+}
+
+export async function toggleNotificationVisibility(notifId) {
+  const local = JSON.parse(localStorage.getItem('amrita_notifications_data') || '[]');
+  const item = local.find((n) => n.id === notifId);
+  if (item) {
+    item.is_published = !item.is_published;
+    localStorage.setItem('amrita_notifications_data', JSON.stringify(local));
+
+    if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      try {
+        await supabase.from('notifications').update({ is_published: item.is_published }).eq('id', notifId);
+      } catch (e) {
+        console.warn('[Supabase] Visibility update exception:', e);
+      }
+    }
+
+    saveAdminAuditLog({
+      action: item.is_published ? 'NOTIFICATION_PUBLISHED' : 'NOTIFICATION_UNPUBLISHED',
+      target_user_id: item.target_user_id || 'All',
+      details: `${item.is_published ? 'Published' : 'Unpublished'} notification '${item.title}'`,
+      status: 'Success',
+    });
+  }
 }
 
 export async function fetchJarMemories({ includeInactive = false } = {}) {

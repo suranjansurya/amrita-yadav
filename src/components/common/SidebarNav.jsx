@@ -7,6 +7,7 @@ export function SidebarNav({ currentUser, onOpenFeature, onLogout }) {
   const userName = currentUser?.displayName || currentUser?.userId || 'Amrita Yadav';
 
   const NAV_ITEMS = [
+    { id: 'notifications', label: 'Notifications', icon: '🔔', color: 'from-amber-400 to-pink-500' },
     { id: 'justforyou', label: 'Just For You', icon: '💌', color: 'from-rose-400 to-pink-500' },
     { id: 'memorywall', label: 'Photo & Memory Wall', icon: '🖼️', color: 'from-pink-400 to-rose-500' },
     { id: 'sky', label: 'Constellation Sky', icon: '🌌', color: 'from-indigo-400 to-purple-500' },

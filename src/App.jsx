@@ -33,6 +33,7 @@ import { ConstellationModal } from './components/common/ConstellationModal';
 import { JustForYouModal } from './components/common/JustForYouModal';
 import { MoodCheckInModal } from './components/common/MoodCheckInModal';
 import { MemoryWallModal } from './components/common/MemoryWallModal';
+import { NotificationCenterModal } from './components/common/NotificationCenterModal';
 import { AdminDashboard } from './pages/AdminDashboard';
 
 // Interactive Modules
@@ -132,6 +133,7 @@ export default function App() {
   const [isHeartCheckInDone, setIsHeartCheckInDone] = useState(false);
 
   const [isJustForYouOpen, setIsJustForYouOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMemoryWallOpen, setIsMemoryWallOpen] = useState(false);
   const [isConstellationOpen, setIsConstellationOpen] = useState(false);
   const [isSecretUnlockOpen, setIsSecretUnlockOpen] = useState(false);
@@ -270,6 +272,9 @@ export default function App() {
     switch (id) {
       case 'justforyou':
         setIsJustForYouOpen(true);
+        break;
+      case 'notifications':
+        setIsNotifOpen(true);
         break;
       case 'memorywall':
         setIsMemoryWallOpen(true);
@@ -473,6 +478,14 @@ export default function App() {
         <Section49FinalDedication />
         <Section50FinalControls />
       </main>
+
+      {/* Phase 35: Smart Notification Center Overlay */}
+      <NotificationCenterModal
+        isOpen={isNotifOpen}
+        onClose={() => setIsNotifOpen(false)}
+        currentUser={currentUser}
+        onOpenFeature={handleOpenFeature}
+      />
 
       {/* Phase 34: Premium Photo & Memory Wall Modal Overlay */}
       <MemoryWallModal
